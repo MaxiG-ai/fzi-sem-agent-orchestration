@@ -420,3 +420,6 @@ FodyWeavers.xsd
 # local env file
 .env
 .ENV
+
+# Marimo Folder
+__marimo__
