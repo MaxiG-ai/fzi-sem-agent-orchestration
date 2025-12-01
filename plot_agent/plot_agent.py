@@ -9,10 +9,7 @@ from openai import OpenAI
 
 from streampipes_data import load_measure_df
 
-# =====================================================================
 # SETUP
-# =====================================================================
-
 load_dotenv()
 
 if not os.getenv("OPENAI_API_KEY"):
@@ -23,10 +20,6 @@ LLM = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 DEFAULT_MEASURE = "sensor_data"
 VALID_MEASURES = ["sensor_data"]
 
-
-# =====================================================================
-# HELFER-FUNKTIONEN
-# =====================================================================
 
 def ensure_plots_dir():
     plot_dir = os.path.join(os.path.dirname(__file__), "plots")
@@ -50,9 +43,8 @@ def get_timestamp_column(df: pd.DataFrame) -> str:
     raise ValueError("Keine Zeitspalte gefunden.")
 
 
-# =====================================================================
+
 # Prüfung, ob Zeitwert gültig ist
-# =====================================================================
 
 def is_valid_time(value):
     """Erlaubt nur echte Zeitstrings – ignoriert '.', '...', None etc."""
@@ -63,10 +55,7 @@ def is_valid_time(value):
         return False
     return True
 
-
-# =====================================================================
 # DATAFRAME FILTERUNG
-# =====================================================================
 
 def filter_df(df: pd.DataFrame, args: dict) -> pd.DataFrame:
     df_f = df.copy()
@@ -84,10 +73,8 @@ def filter_df(df: pd.DataFrame, args: dict) -> pd.DataFrame:
 
     return df_f
 
-
-# =====================================================================
 # PLOT-FUNKTIONEN
-# =====================================================================
+
 
 def plot_time_series(df, measure, column):
     column = normalize_column(df, column)
@@ -145,10 +132,8 @@ def plot_corr(df, measure):
     plt.close()
     return {"path": path}
 
-
-# =====================================================================
 # LLM SYSTEM PROMPT
-# =====================================================================
+
 
 SYSTEM_PROMPT = """
 Du bist ein Datenanalyse-Agent für StreamPipes.
@@ -190,10 +175,8 @@ def llm_decide(user_msg: str) -> dict:
     )
     return json.loads(response.choices[0].message.content)
 
-
-# =====================================================================
 # ROUTER
-# =====================================================================
+
 
 def route_tool(tool: str, args: dict):
     measure = args.get("measure", DEFAULT_MEASURE)
@@ -220,9 +203,9 @@ def route_tool(tool: str, args: dict):
     raise ValueError(f"Unbekanntes Tool: {tool}")
 
 
-# =====================================================================
+
 # CLI LOOP
-# =====================================================================
+
 
 def main():
     print("🚀 Plot-Agent gestartet — StreamPipes angebunden")

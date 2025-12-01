@@ -5,9 +5,8 @@ from streampipes.client.config import StreamPipesClientConfig
 from streampipes.client.credential_provider import StreamPipesApiKeyCredentials
 import pandas as pd
 
-# ==========================================================
-# KONFIGURATION – bitte API KEY prüfen
-# ==========================================================
+
+# KONFIGURATION 
 
 SP_USERNAME = "admin@streampipes.apache.org"
 SP_API_KEY = "eIIMPM)@xljkKZZba+Pj4Yx6"
@@ -15,9 +14,7 @@ SP_HOST = "localhost"
 SP_PORT = 80
 SP_HTTPS_DISABLED = True
 
-# ==========================================================
 # StreamPipes Client erstellen
-# ==========================================================
 
 _config = StreamPipesClientConfig(
     credential_provider=StreamPipesApiKeyCredentials(
@@ -32,9 +29,8 @@ _config = StreamPipesClientConfig(
 _client = StreamPipesClient(client_config=_config)
 
 
-# ==========================================================
+
 # DataLake → DataFrame (ALLE Daten)
-# ==========================================================
 
 def load_measure_df(measure_id: str) -> pd.DataFrame:
     """
