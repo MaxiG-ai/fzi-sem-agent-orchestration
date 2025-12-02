@@ -1,3 +1,5 @@
+#was ich geändert habe: die Daten werden aus der orchestrator datei genommen und nicht mehr in der datei hier
+#der ein und ausgabe loop wurde raus gemacht 
 import os
 import json
 import matplotlib
@@ -7,7 +9,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from streampipes_data import load_measure_df
+#from streampipes_data import load_measure_df
 
 # SETUP
 load_dotenv()
@@ -17,8 +19,8 @@ if not os.getenv("OPENAI_API_KEY"):
 
 LLM = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-DEFAULT_MEASURE = "sensor_data"
-VALID_MEASURES = ["sensor_data"]
+#DEFAULT_MEASURE = "sensor_data"
+#VALID_MEASURES = ["sensor_data"]
 
 
 def ensure_plots_dir():
@@ -157,6 +159,10 @@ Du gibst IMMER folgendes JSON zurück:
 }
 
 Regeln:
+- Zeitreihe → tool = "time_series"
+- Histogramm → tool = "histogram"
+- Scatter → tool = "scatter"
+- Korrelationsmatrix → tool = "corr"
 - measure bleibt IMMER 'sensor_data' (außer explizit genannt).
 - Zeitangaben → start_time / end_time.
 - Limit ist ein Integer.
@@ -178,55 +184,59 @@ def llm_decide(user_msg: str) -> dict:
 # ROUTER
 
 
-def route_tool(tool: str, args: dict):
-    measure = args.get("measure", DEFAULT_MEASURE)
-
-    if measure not in VALID_MEASURES:
-        print(f"⚠️ Warnung: measure '{measure}' ungültig → fallback zu 'sensor_data'")
-        measure = DEFAULT_MEASURE
-
-    df = load_measure_df(measure)
-    df_filtered = filter_df(df, args)
+def route_tool(df_sensor: pd.DataFrame, tool: str, args: dict):
+    df_filtered = filter_df(df_sensor, args)
 
     if tool == "time_series":
-        return plot_time_series(df_filtered, measure, args["column"])
+        return plot_time_series(df_filtered, args.get("measure", "sensor_data"), args["column"])
 
     if tool == "histogram":
-        return plot_histogram(df_filtered, measure, args["column"], args.get("bins", 30))
+        return plot_histogram(df_filtered, args.get("measure", "sensor_data"), args["column"], args.get("bins", 30))
 
     if tool == "scatter":
-        return plot_scatter(df_filtered, measure, args["x_col"], args["y_col"])
+        return plot_scatter(df_filtered, args.get("measure", "sensor_data"), args["x_col"], args["y_col"])
 
     if tool == "corr":
-        return plot_corr(df_filtered, measure)
+        return plot_corr(df_filtered, args.get("measure", "sensor_data"))
 
     raise ValueError(f"Unbekanntes Tool: {tool}")
 
+#def run_plot_agent(user_input: str, df_sensor: pd.DataFrame) -> str:
+    plan = llm_decide(user_input)
+    result = route_tool(df_sensor, plan["tool"], plan["args"])
+    return f"Plot gespeichert unter: {result['path']}"
+# ---------------------------
+
+# NEU: run_plot_agent
+def run_plot_agent(user_input: str, df_sensor: pd.DataFrame) -> str:
+    plan = llm_decide(user_input)
+    result = route_tool(df_sensor, plan["tool"], plan["args"])
+    return f"Plot gespeichert unter: {result['path']}"
+# ---------------------------
+
+# CLI LOOP den kommentiere ich aus damit der loop nicht drin is 
 
 
-# CLI LOOP
+#def main():
+    #print("🚀 Plot-Agent gestartet — StreamPipes angebunden")
+    #print("exit zum Beenden.\n")
+
+    #while True:
+        #user = input("> ").strip()
+        #if user.lower() in ("exit", "quit"):
+         #   break
+
+        #try:
+         #   plan = llm_decide(user)
+          #  print("🔧 Tool:", plan["tool"])
+           # print("🔧 Args:", plan["args"])
+
+            #result = route_tool(plan["tool"], plan["args"])
+            #print("\n📁 Plot gespeichert unter:", result["path"])
+
+#        except Exception as e:
+ #           print("❌ Fehler:", e)
 
 
-def main():
-    print("🚀 Plot-Agent gestartet — StreamPipes angebunden")
-    print("exit zum Beenden.\n")
-
-    while True:
-        user = input("> ").strip()
-        if user.lower() in ("exit", "quit"):
-            break
-
-        try:
-            plan = llm_decide(user)
-            print("🔧 Tool:", plan["tool"])
-            print("🔧 Args:", plan["args"])
-
-            result = route_tool(plan["tool"], plan["args"])
-            print("\n📁 Plot gespeichert unter:", result["path"])
-
-        except Exception as e:
-            print("❌ Fehler:", e)
-
-
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+  #  main()
