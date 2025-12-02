@@ -10,97 +10,91 @@ from langchain_core.tools.structured import StructuredTool
 from langchain.memory import ConversationBufferMemory
 from langchain.memory.chat_message_histories import ChatMessageHistory
 
-
-
-from data.sp_data import load_sensor_data_from_csv
-
-CSV_FILE = "data/sample_sensor_data.csv"
-df_sensor = load_sensor_data_from_csv(CSV_FILE)
 # =============================
 #  .env laden
 # =============================
 load_dotenv()
-
 openai_key = os.getenv("OPENAI_API_KEY")
-#sp_user = os.getenv("SP_USER")
-#sp_api_key = os.getenv("SP_API_KEY")
-
 if openai_key is None:
     raise ValueError("OPENAI_API_KEY nicht gefunden! Bitte in .env eintragen.")
 
-
-print(df_sensor)
-def get_max_value(column_name: str):
-    """Gibt den höchsten Wert einer Spalte in df_sensor zurück."""
-    if column_name not in df_sensor.columns:
+# =============================
+#  Funktionen für Datenanalyse
+# =============================
+def get_max_value(df: pd.DataFrame, column_name: str):
+    """Gibt den höchsten Wert der angegebenen Spalte zurück."""
+    if column_name not in df.columns:
         return f"Spalte '{column_name}' existiert nicht."
-    value = df_sensor[column_name].max()
+    value = df[column_name].max()
     return f"Der höchste Wert in '{column_name}' beträgt {float(value):.2f}."
 
 
-def get_min_value(column_name: str):
-    """Gibt den niedrigsten Wert einer Spalte in df_sensor zurück."""
-    if column_name not in df_sensor.columns:
+def get_min_value(df: pd.DataFrame, column_name: str):
+    """Gibt den niedrigsten Wert der angegebenen Spalte zurück."""
+    if column_name not in df.columns:
         return f"Spalte '{column_name}' existiert nicht."
-    value = df_sensor[column_name].min()
+    value = df[column_name].min()
     return f"Der niedrigste Wert in '{column_name}' beträgt {float(value):.2f}."
 
 
-def detect_outliers_above(column_name: str, threshold_value: float):
-    """Findet alle Werte in df_sensor, die über einem Schwellenwert liegen."""
-    if column_name not in df_sensor.columns:
+def detect_outliers_above(df: pd.DataFrame, column_name: str, threshold_value: float):
+    """Findet alle Werte in der Spalte, die über dem angegebenen Schwellenwert liegen."""
+    if column_name not in df.columns:
         return f"Spalte '{column_name}' existiert nicht."
-    outliers = df_sensor[df_sensor[column_name] > threshold_value]
+    outliers = df[df[column_name] > threshold_value]
     if outliers.empty:
         return f"Keine Ausreißer über {threshold_value} gefunden."
     return outliers[[column_name, "timestamp"]].to_dict(orient="records")
 
 
-def detect_outliers_below(column_name: str, threshold_value: float):
-    """Findet alle Werte in df_sensor, die unter einem Schwellenwert liegen."""
-    if column_name not in df_sensor.columns:
+def detect_outliers_below(df: pd.DataFrame, column_name: str, threshold_value: float):
+    """Findet alle Werte in der Spalte, die unter dem angegebenen Schwellenwert liegen."""
+    if column_name not in df.columns:
         return f"Spalte '{column_name}' existiert nicht."
-    outliers = df_sensor[df_sensor[column_name] < threshold_value]
+    outliers = df[df[column_name] < threshold_value]
     if outliers.empty:
         return f"Keine Ausreißer unter {threshold_value} gefunden."
     return outliers[[column_name, "timestamp"]].to_dict(orient="records")
 
 
-
 # =============================
-#  Tools
+#  Agent-Konstruktion
 # =============================
-tools = [
-    StructuredTool.from_function(get_max_value, name="get_max_value"),
-    StructuredTool.from_function(get_min_value, name="get_min_value"),
-    StructuredTool.from_function(detect_outliers_above, name="detect_outliers_above"),
-    StructuredTool.from_function(detect_outliers_below, name="detect_outliers_below"),
-]
+def create_ano_agent(df: pd.DataFrame) -> AgentExecutor:
+    # Tools als normale Funktionen mit Docstrings definieren
+    def max_value_tool(column_name: str):
+        """Gibt den höchsten Wert einer Spalte zurück."""
+        return get_max_value(df, column_name)
 
+    def min_value_tool(column_name: str):
+        """Gibt den niedrigsten Wert einer Spalte zurück."""
+        return get_min_value(df, column_name)
 
-# =============================
-#  System-Prompt
-# =============================
-#system_prompt = SystemMessage(content="""
-#Du bist ein statistischer Analyse-Assistent.
-#Erkenne automatisch die Spalten im DataFrame 'sensor_data'.
-#Spaltennamen können auf Deutsch oder Englisch sein (z.B. 'temperature', 'Temperatur').
-#Finde heraus, was der Benutzer möchte (Maximum, Minimum, Ausreißer)
-#und nutze IMMER die passenden Tools.
-#Wenn der Nutzer einen Spaltennamen nennt, der nicht exakt existiert, suche nach dem ähnlichsten passenden Spaltennamen.
-#""")
+    def outliers_above_tool(column_name: str, threshold_value: float):
+        """Gibt alle Werte über einem Schwellenwert zurück."""
+        return detect_outliers_above(df, column_name, threshold_value)
 
-# Automatisch Spaltenliste erzeugen
-column_list = ", ".join(df_sensor.columns)
+    def outliers_below_tool(column_name: str, threshold_value: float):
+        """Gibt alle Werte unter einem Schwellenwert zurück."""
+        return detect_outliers_below(df, column_name, threshold_value)
 
-system_prompt = SystemMessage(content=f"""
+    # Tools für LangChain vorbereiten
+    tools = [
+        StructuredTool.from_function(max_value_tool, name="get_max_value"),
+        StructuredTool.from_function(min_value_tool, name="get_min_value"),
+        StructuredTool.from_function(outliers_above_tool, name="detect_outliers_above"),
+        StructuredTool.from_function(outliers_below_tool, name="detect_outliers_below"),
+    ]
+
+    # System-Prompt erstellen
+    column_list = ", ".join(df.columns)
+    system_prompt = SystemMessage(content=f"""
 Du bist ein statistischer Analyse-Assistent.
 
 Der DataFrame 'sensor_data' hat folgende Spalten:
 {column_list}
 
-Spaltennamen können auf Deutsch oder Englisch vorkommen
-(z.B. 'temperature' ↔ 'Temperatur').
+Spaltennamen können auf Deutsch oder Englisch vorkommen (z.B. 'temperature' ↔ 'Temperatur').
 
 Deine Aufgaben:
 - Erkenne, ob der Benutzer Maximum, Minimum oder Ausreißer möchte
@@ -109,37 +103,29 @@ Deine Aufgaben:
     → suche nach dem ähnlichsten passenden Spaltennamen
 """)
 
+    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+
+    prompt = ChatPromptTemplate.from_messages([
+        system_prompt,
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
+
+    agent = create_openai_functions_agent(
+        llm=llm,
+        tools=tools,
+        prompt=prompt
+    )
+
+    chat_history = ChatMessageHistory()
+    memory = ConversationBufferMemory(chat_memory=chat_history, memory_key="chat_history", return_messages=True)
+
+    agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
+    return agent_executor
 
 
-# =============================
-#  LLM & Prompt
-# =============================
-llm = ChatOpenAI(model="gpt-4o", temperature=0)
-
-prompt = ChatPromptTemplate.from_messages([
-    system_prompt,
-    MessagesPlaceholder(variable_name="chat_history"),
-    ("user", "{input}"),
-    MessagesPlaceholder(variable_name="agent_scratchpad"),
-])
-
-agent = create_openai_functions_agent(
-    llm=llm,
-    tools=tools,
-    prompt=prompt
-)
-
-
-# =============================
-#  Memory
-# =============================
-chat_history = ChatMessageHistory()
-memory = ConversationBufferMemory(chat_memory=chat_history, memory_key="chat_history", return_messages=True)
-
-agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
-
-
-__all__ = ["agent_executor"]
+__all__ = ["create_ano_agent"]
 
 
 

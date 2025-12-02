@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 from dotenv import load_dotenv
 
 # =============================
@@ -12,61 +13,61 @@ if os.getenv("OPENAI_API_KEY") is None:
 # =============================
 # Agenten importieren
 # =============================
-from agents.AnoAgent import agent_executor as ano_agent
-# Platz für spätere Imports:
-# from agents.physics_agent import agent_executor as physics_agent
-# from agents.plot_agent import agent_executor as plot_agent
+from agents.AnoAgent import create_ano_agent
+from agents.physics_agent import run_agent as physics_agent  # physics_agent erwartet DataFrame
+
+# =============================
+# CSV laden
+# =============================
+CSV_FILE = "data/sample_sensor_data.csv"
+df_sensor = pd.read_csv(CSV_FILE)
+print(f"Geladene Spalten: {', '.join(df_sensor.columns)}")
+
 
 
 # =============================
-# Modularer Orchestrator
+# Orchestrator
 # =============================
 class OrchestratorAgent:
     def __init__(self):
         print("Orchestrator gestartet – aktuell aktiv: AnoAgent.")
-
-        # Registry der Agenten (später einfach erweitern)
+        
+        # Erstelle Agent-Instanzen und übergebe df_sensor
         self.agents = {
             "statistics": {
                 "keywords": ["max", "min", "outlier", "ausreißer", "median", "mittelwert"],
-                "agent": ano_agent,
+                "agent": create_ano_agent(df_sensor),  # Übergabe des DataFrames
             },
-            # "physics": {
-            #     "keywords": ["force", "energie", "physik", "formula", "correlation"],
-            #     "agent": physics_agent,
-            # },
-            # "plot": {
-            #     "keywords": ["plot", "diagramm", "chart", "graph"],
-            #     "agent": plot_agent,
-            # },
+            "physics": {
+                "keywords": ["force", "energie", "physik", "formula", "correlation", "relationship"],
+                "agent": lambda user_input: physics_agent(user_input, df_sensor),  # Übergabe des DataFrames
+            },
         }
 
     # ----------------------------------------------
-
     def route_to_agent(self, user_input: str):
         """Durchsucht alle Agenten nach passenden Keywords"""
-
         user_text = user_input.lower()
-
         for agent_name, entry in self.agents.items():
             if any(keyword in user_text for keyword in entry["keywords"]):
                 return entry["agent"]
-
         return None
 
     # ----------------------------------------------
-
     def run(self, user_input: str):
         """Hauptlogik: wählt Agent aus und führt ihn aus"""
-
         agent = self.route_to_agent(user_input)
 
         if agent is None:
             return "❌ Kein passender Agent gefunden."
 
-        # AnoAgent nutzt .invoke()
-        result = agent.invoke({"input": user_input})
-        return result["output"]
+        # Prüfe, ob es ein AgentExecutor (AnoAgent) oder Lambda (Physics-Agent) ist
+        if hasattr(agent, "invoke"):
+            result = agent.invoke({"input": user_input})
+            return result["output"]
+        else:
+            # Physics-Agent ist eine Funktion
+            return agent(user_input)
 
 
 # =============================
@@ -83,3 +84,4 @@ if __name__ == "__main__":
 
         output = orchestrator.run(user_input)
         print("\nAntwort:\n", output, "\n")
+
