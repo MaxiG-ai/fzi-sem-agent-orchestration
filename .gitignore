@@ -423,3 +423,4 @@ FodyWeavers.xsd
 
 # Marimo Folder
 __marimo__
+.DS_Store
