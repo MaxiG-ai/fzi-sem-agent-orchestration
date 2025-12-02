@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -29,11 +29,17 @@ from langgraph.prebuilt import ToolNode
 
 # Load environment variables from .env file
 load_dotenv()
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY not found in .env file. Please create a .env file with your API key.")
+AZURE_AI_CREDENTIAL = os.getenv("AZURE_AI_CREDENTIAL")
+AZURE_AI_ENDPOINT = os.getenv("AZURE_AI_ENDPOINT")
+AZURE_AI_MODEL_NAME = os.getenv("AZURE_AI_MODEL_NAME")
+AZURE_AI_DEPLOYMENT = os.getenv("AZURE_AI_DEPLOYMENT", "o4-mini")
+AZURE_AI_API_VERSION = os.getenv("AZURE_AI_API_VERSION", "2024-12-01-preview")
+
+if not AZURE_AI_CREDENTIAL:
+    raise ValueError(
+        "AZURE_AI_CREDENTIAL not found in .env file. Please create a .env file with your API key."
+    )
 
 # ============================================================================
 # STATE DEFINITION
@@ -190,10 +196,12 @@ def call_model(state: AgentState):
     messages = state["messages"]
     
     # Initialize ChatOpenAI with OpenRouter configuration
-    model = ChatOpenAI(
-        model="openai/gpt-4o-mini",
-        base_url=OPENROUTER_BASE_URL,
-        api_key=OPENROUTER_API_KEY,
+    model = AzureChatOpenAI(
+        azure_deployment=AZURE_AI_DEPLOYMENT,
+        model_name=AZURE_AI_MODEL_NAME,
+        api_version=AZURE_AI_API_VERSION,
+        azure_endpoint=AZURE_AI_ENDPOINT,
+        api_key=AZURE_AI_CREDENTIAL,
     )
     
     # Bind tools to the model
