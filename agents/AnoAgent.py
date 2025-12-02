@@ -10,108 +10,61 @@ from langchain_core.tools.structured import StructuredTool
 from langchain.memory import ConversationBufferMemory
 from langchain.memory.chat_message_histories import ChatMessageHistory
 
+
+
+from data.sp_data import load_sensor_data_from_csv
+
+CSV_FILE = "data/sample_sensor_data.csv"
+df_sensor = load_sensor_data_from_csv(CSV_FILE)
 # =============================
 #  .env laden
 # =============================
 load_dotenv()
 
 openai_key = os.getenv("OPENAI_API_KEY")
-sp_user = os.getenv("SP_USER")
-sp_api_key = os.getenv("SP_API_KEY")
+#sp_user = os.getenv("SP_USER")
+#sp_api_key = os.getenv("SP_API_KEY")
 
 if openai_key is None:
     raise ValueError("OPENAI_API_KEY nicht gefunden! Bitte in .env eintragen.")
 
-if sp_user is None:
-    raise ValueError("SP_USER nicht gefunden! Bitte in .env eintragen.")
 
-if sp_api_key is None:
-    raise ValueError("SP_API_KEY nicht gefunden! Bitte in .env eintragen.")
-
-
-# =============================
-#  StreamPipes Zugang
-# =============================
-from streampipes.client import StreamPipesClient
-from streampipes.client.config import StreamPipesClientConfig
-from streampipes.client.credential_provider import StreamPipesApiKeyCredentials
-
-# ONLY these two env vars are used now
-os.environ["SP_USER"] = sp_user
-os.environ["SP_API_KEY"] = sp_api_key
-
-config = StreamPipesClientConfig(
-    credential_provider=StreamPipesApiKeyCredentials.from_env(
-        username_env="SP_USER",
-        api_key_env="SP_API_KEY"
-    ),
-    host_address="localhost",
-    https_disabled=True,
-    port=80
-)
-
-sp_client = StreamPipesClient(client_config=config)
+print(df_sensor)
+def get_max_value(column_name: str):
+    """Gibt den höchsten Wert einer Spalte in df_sensor zurück."""
+    if column_name not in df_sensor.columns:
+        return f"Spalte '{column_name}' existiert nicht."
+    value = df_sensor[column_name].max()
+    return f"Der höchste Wert in '{column_name}' beträgt {float(value):.2f}."
 
 
-# =============================
-#  Daten abrufen
-# =============================
-df_pressure = sp_client.dataLakeMeasureApi.get("pressure-1", limit=1000).to_pandas()
-df_pressure['timestamp'] = pd.to_datetime(df_pressure['timestamp'], unit='ms')
-
-df_flow = sp_client.dataLakeMeasureApi.get("flow-rate", limit=1000).to_pandas()
-df_flow['timestamp'] = pd.to_datetime(df_flow['timestamp'], unit='ms')
-
-print(df_pressure.head())
-print(df_flow.head())
+def get_min_value(column_name: str):
+    """Gibt den niedrigsten Wert einer Spalte in df_sensor zurück."""
+    if column_name not in df_sensor.columns:
+        return f"Spalte '{column_name}' existiert nicht."
+    value = df_sensor[column_name].min()
+    return f"Der niedrigste Wert in '{column_name}' beträgt {float(value):.2f}."
 
 
-# =============================
-#  Funktionen (Tools)
-# =============================
-def get_max_value(df_name: str, column_name: str):
-    df_map = {"pressure": df_pressure, "flow": df_flow}
-    df = df_map.get(df_name.lower())
-    if df is None:
-        return f"DataFrame {df_name} existiert nicht."
-    if column_name not in df.columns:
-        return f"Spalte {column_name} existiert nicht in DataFrame {df_name}."
-    value = df[column_name].max()
-    return f"Der höchste Wert in '{column_name}' von '{df_name}' beträgt {float(value):.2f}."
-
-def get_min_value(df_name: str, column_name: str):
-    df_map = {"pressure": df_pressure, "flow": df_flow}
-    df = df_map.get(df_name.lower())
-    if df is None:
-        return f"DataFrame {df_name} existiert nicht."
-    if column_name not in df.columns:
-        return f"Spalte {column_name} existiert nicht in DataFrame {df_name}."
-    value = df[column_name].min()
-    return f"Der niedrigste Wert in '{column_name}' von '{df_name}' beträgt {float(value):.2f}."
-
-def detect_outliers_above(df_name: str, column_name: str, threshold_value: float):
-    df_map = {"pressure": df_pressure, "flow": df_flow}
-    df = df_map.get(df_name.lower())
-    if df is None:
-        return f"DataFrame {df_name} existiert nicht."
-    if column_name not in df.columns:
-        return f"Spalte {column_name} existiert nicht in DataFrame {df_name}."
-    outliers = df[df[column_name] > threshold_value]
+def detect_outliers_above(column_name: str, threshold_value: float):
+    """Findet alle Werte in df_sensor, die über einem Schwellenwert liegen."""
+    if column_name not in df_sensor.columns:
+        return f"Spalte '{column_name}' existiert nicht."
+    outliers = df_sensor[df_sensor[column_name] > threshold_value]
     if outliers.empty:
         return f"Keine Ausreißer über {threshold_value} gefunden."
     return outliers[[column_name, "timestamp"]].to_dict(orient="records")
 
-def detect_outliers_below(df_name: str, column_name: str, threshold_value: float):
-    df_map = {"pressure": df_pressure, "flow": df_flow}
-    df = df_map.get(df_name.lower())
-    if df is None:
-        return f"DataFrame {df_name} existiert nicht."
-    if column_name not in df.columns:
-        return f"Spalte {column_name} existiert nicht in DataFrame {df_name}."
-    outliers = df[df[column_name] < threshold_value]
+
+def detect_outliers_below(column_name: str, threshold_value: float):
+    """Findet alle Werte in df_sensor, die unter einem Schwellenwert liegen."""
+    if column_name not in df_sensor.columns:
+        return f"Spalte '{column_name}' existiert nicht."
+    outliers = df_sensor[df_sensor[column_name] < threshold_value]
     if outliers.empty:
         return f"Keine Ausreißer unter {threshold_value} gefunden."
     return outliers[[column_name, "timestamp"]].to_dict(orient="records")
+
 
 
 # =============================
@@ -128,14 +81,34 @@ tools = [
 # =============================
 #  System-Prompt
 # =============================
-system_prompt = SystemMessage(content="""
+#system_prompt = SystemMessage(content="""
+#Du bist ein statistischer Analyse-Assistent.
+#Erkenne automatisch die Spalten im DataFrame 'sensor_data'.
+#Spaltennamen können auf Deutsch oder Englisch sein (z.B. 'temperature', 'Temperatur').
+#Finde heraus, was der Benutzer möchte (Maximum, Minimum, Ausreißer)
+#und nutze IMMER die passenden Tools.
+#Wenn der Nutzer einen Spaltennamen nennt, der nicht exakt existiert, suche nach dem ähnlichsten passenden Spaltennamen.
+#""")
+
+# Automatisch Spaltenliste erzeugen
+column_list = ", ".join(df_sensor.columns)
+
+system_prompt = SystemMessage(content=f"""
 Du bist ein statistischer Analyse-Assistent.
-Erkenne:
-- DataFrames automatisch ('pressure', 'flow')
-- Spalten automatisch
-- was der Benutzer möchte (Maximum, Minimum, Ausreißer)
-Nutze IMMER die passenden Tools.
+
+Der DataFrame 'sensor_data' hat folgende Spalten:
+{column_list}
+
+Spaltennamen können auf Deutsch oder Englisch vorkommen
+(z.B. 'temperature' ↔ 'Temperatur').
+
+Deine Aufgaben:
+- Erkenne, ob der Benutzer Maximum, Minimum oder Ausreißer möchte
+- Nutze IMMER die passenden Tools
+- Wenn der Nutzer einen Spaltennamen nennt, der nicht exakt existiert:
+    → suche nach dem ähnlichsten passenden Spaltennamen
 """)
+
 
 
 # =============================
@@ -166,15 +139,7 @@ memory = ConversationBufferMemory(chat_memory=chat_history, memory_key="chat_his
 agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
 
 
-# =============================
-#  Interaktive Schleife
-# =============================
-print("Chat-Agent bereit! Tippe 'exit' zum Beenden.\n")
+__all__ = ["agent_executor"]
 
-while True:
-    user_input = input(">> ").strip()
-    if user_input.lower() in ["exit", "quit", "stop"]:
-        print("Chat beendet.")
-        break
-    response = agent_executor.invoke({"input": user_input})
-    print("\nAntwort des Agents:\n", response["output"], "\n")
+
+
