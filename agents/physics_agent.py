@@ -23,6 +23,8 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
+from data.sp_data import load_sensor_data_from_csv
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -195,7 +197,7 @@ def call_model(state: AgentState):
     """Call the language model with tools bound."""
     messages = state["messages"]
     
-    # Initialize ChatOpenAI with OpenRouter configuration
+    # Initialize ChatOpenAI with Azure configuration
     model = AzureChatOpenAI(
         azure_deployment=AZURE_AI_DEPLOYMENT,
         model_name=AZURE_AI_MODEL_NAME,
@@ -240,9 +242,8 @@ graph = workflow.compile()
 # AGENT RUNNER
 # ============================================================================
 
-def run_agent(
+def run_physics_agent(
     user_message: str, 
-    df: pd.DataFrame, 
     max_iterations: int = 10
 ) -> str:
     """
@@ -263,6 +264,8 @@ def run_agent(
         The agent's final response as a string
     """
     global _current_data_json
+    
+    df = load_sensor_data_from_csv("data/sample_sensor_data.csv")
     
     # Serialize dataframe and store in global variable
     _current_data_json = df.to_json()
@@ -348,26 +351,14 @@ Be concise and focus on actionable insights."""
 
 def main():
     """
-    Standalone test with synthetic sensor data.
+    Standalone test with store sensor data.
     Run this file directly to test the agent without StreamPipes.
     """
-    print("Creating synthetic sensor data for testing...")
-    
-    # Create sample data matching StreamPipes sensor format
-    data = {
-        "timestamp": ["2025-11-10T14:21:07.047"] * 100,
-        "density": [40 + i * 0.1 for i in range(100)],          # Increasing density
-        "level": [20 + (i % 2) * 50 for i in range(100)],       # Oscillating level
-        "mass_flow": [0.01 + i * 0.11 for i in range(100)],     # Increasing mass flow
-        "temperature": [40 + i * 0.6 for i in range(100)],       # Increasing temperature
-        "volume_flow": [0.05 + i * 0.11 for i in range(100)],   # Increasing volume flow
-    }
-    df = pd.DataFrame(data)
-    
-    print(f"Generated {len(df)} data points with columns: {', '.join(df.columns)}\n")
+    # Load using sample CSV data
+    df = load_sensor_data_from_csv("data/sample_sensor_data.csv")
     
     # Test query 1: Correlation and physics relationship
-    run_agent(
+    run_physics_agent(
         "Analyze correlations between mass_flow, volume_flow, and density. "
         "Then check what physics formula should relate these fields.",
         df,
@@ -376,7 +367,7 @@ def main():
     print("\n" + "="*80 + "\n")
     
     # Test query 2: Temperature-density relationship
-    run_agent(
+    run_physics_agent(
         "I'm seeing temperature and density changing together. "
         "What physics explains this relationship?",
         df,
