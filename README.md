@@ -22,7 +22,7 @@ A stored sensor data version can also be loaded from a .csv file using:
 ```python
 from data.sp_data import load_sensor_data_from_csv
 
-df = load_sensor_data_from_csv("data/sample_sensor_data.csv")
+df = load_sensor_data_from_csv()
 ```
 
 This file can be updated by running `data/sp_data.py` as a script.
