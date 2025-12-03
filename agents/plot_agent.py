@@ -1,43 +1,21 @@
+# agents/plot_agent.py
 import os
-import json
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
-from dotenv import load_dotenv
-
-from langchain_openai import AzureChatOpenAI
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
+
+from agents.utils import get_azure_llm
 
 from data.sp_data import load_sensor_data_from_csv
 
-# Load environment variables from .env file
-load_dotenv()
-
-AZURE_AI_CREDENTIAL = os.getenv("AZURE_AI_CREDENTIAL")
-AZURE_AI_ENDPOINT = os.getenv("AZURE_AI_ENDPOINT")
-AZURE_AI_MODEL_NAME = os.getenv("AZURE_AI_MODEL_NAME")
-AZURE_AI_DEPLOYMENT = os.getenv("AZURE_AI_DEPLOYMENT", "o4-mini")
-AZURE_AI_API_VERSION = os.getenv("AZURE_AI_API_VERSION", "2024-12-01-preview")
-
-if not AZURE_AI_CREDENTIAL:
-    raise ValueError(
-        "AZURE_AI_CREDENTIAL not found in .env file. Please create a .env file with your API key."
-    )
-
-LLM = AzureChatOpenAI(
-    azure_deployment=AZURE_AI_DEPLOYMENT,
-    model_name=AZURE_AI_MODEL_NAME,
-    api_version=AZURE_AI_API_VERSION,
-    azure_endpoint=AZURE_AI_ENDPOINT,
-    api_key=AZURE_AI_CREDENTIAL,
-)
-
-DEFAULT_MEASURE = "sensor_data"  # bleibt für spätere Erweiterungen
-
 
 def ensure_plots_dir():
-    plot_dir = os.path.join(os.path.dirname(__file__), "plots")
+    plot_dir = os.path.join("plots")
     os.makedirs(plot_dir, exist_ok=True)
     return plot_dir
 
@@ -86,16 +64,16 @@ def filter_df(df: pd.DataFrame, args: dict) -> pd.DataFrame:
 # PLOT FUNCTIONS
 
 @tool
-def plot_time_series(df, column):
+def plot_time_series(column: str):
     """Plot time series from a df for a column
 
     Args:
-        df (pd.DataFrame): DataFrame containing the data
         column (str): Column to plot
 
     Returns:
         dict: Dictionary with the path to the saved plot image
     """
+    df = load_sensor_data_from_csv()
     column = normalize_column(df, column)
     ts = get_timestamp_column(df)
 
@@ -110,17 +88,17 @@ def plot_time_series(df, column):
 
 
 @tool
-def plot_histogram(df: pd.DataFrame, column: str, bins: int = 30):
+def plot_histogram(column: str, bins: int = 30):
     """Plot histogram for a specific column from a df.
 
     Args:
-        df (pd.DataFrame): DataFrame containing the data
         column (str): Column to plot
         bins (int, optional): Number of bins for the histogram. Defaults to 30.
 
     Returns:
         dict: Dictionary with the path to the saved plot image
     """
+    df = load_sensor_data_from_csv()
     column = normalize_column(df, column)
 
     plt.figure(figsize=(8, 5))
@@ -134,16 +112,16 @@ def plot_histogram(df: pd.DataFrame, column: str, bins: int = 30):
 
 
 @tool
-def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str):
+def plot_scatter(x_col: str, y_col: str):
     """Plot scatter plot for two columns from a df.
     Args:
-        df (pd.DataFrame): DataFrame containing the data
         x_col (str): Column for x-axis
         y_col (str): Column for y-axis
         
     Returns: 
         dict: Dictionary with the path to the saved plot image
     """
+    df = load_sensor_data_from_csv()
     x_col = normalize_column(df, x_col)
     y_col = normalize_column(df, y_col)
 
@@ -158,15 +136,13 @@ def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str):
 
 
 @tool
-def plot_corr(df: pd.DataFrame):
+def plot_corr():
     """Plot correlation matrix for numeric columns in a df.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing the data
 
     Returns:
         dict: Dictionary with the path to the saved plot image
     """
+    df = load_sensor_data_from_csv()
     numeric = df.select_dtypes(include=["float64", "int64"])
     corr = numeric.corr()
 
@@ -181,97 +157,30 @@ def plot_corr(df: pd.DataFrame):
     plt.close()
     return {"path": path}
 
-# LLM SYSTEM PROMPT
+# plot agent runner
 
-SYSTEM_PROMPT = """
-Du bist ein Datenanalyse-Agent für CSV-Sensordaten.
+def run_plot_agent(user_query: str) -> str:
+    llm = get_azure_llm()
 
-FILTEROPTIONEN:
-- limit
-- start_time
-- end_time
+    # Define the list of tools
+    tools = [plot_time_series, plot_histogram, plot_scatter, plot_corr]
 
-Du gibst IMMER folgendes JSON zurück:
-
-{
-  "tool": "<tool>",
-  "args": {
-    "column": "...",
-    "limit": <int>,
-    "start_time": "...",
-    "end_time": "..."
-  }
-}
-
-Regeln:
-- column = Spalte im CSV
-- Valid tools: time_series, histogram, scatter, corr
-- Nutzer muss keine Zeiten angeben
-- Niemals Dummy-Zeichen wie "..." als Zeit interpretieren
-"""
-
-def llm_decide(user_msg: str) -> dict:
-    model = AzureChatOpenAI(
-        azure_deployment=AZURE_AI_DEPLOYMENT,
-        model_name=AZURE_AI_MODEL_NAME,
-        api_version=AZURE_AI_API_VERSION,
-        azure_endpoint=AZURE_AI_ENDPOINT,
-        api_key=AZURE_AI_CREDENTIAL,
+    system_prompt = (
+        "You are a data visualization agent. Create plots based on user requests. "
+        "Always return the file path of the created plot."
     )
-    
-    model = model.bind_tools([
-        plot_time_series,
-        plot_histogram,
-        plot_scatter,
-        plot_corr,
-    ])
-    
-    response = model.invoke([
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_msg},
-    ])
-    
-    return json.loads(response)
 
-# ROUTER
+    prompt = {
+        "messages": [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_query),
+        ],
+        "placeholder": "{agent_scratchpad}",
+    }
 
-def route_tool(tool: str, args: dict):
-    df = load_sensor_data_from_csv("data/sample_sensor_data.csv")
-    df_filtered = filter_df(df, args)
-
-    if tool == "time_series":
-        return plot_time_series(df_filtered, args["column"])
-
-    if tool == "histogram":
-        return plot_histogram(df_filtered, args["column"], args.get("bins", 30))
-
-    if tool == "scatter":
-        return plot_scatter(df_filtered, args["x_col"], args["y_col"])
-
-    if tool == "corr":
-        return plot_corr(df_filtered)
-
-    raise ValueError(f"Unbekanntes Tool: {tool}")
-
-# PUBLIC ENTRY — für rouer
-
-
-def run_plot_agent(user_message: str):
-    """
-    Führt den Plot-Agent einmalig aus und gibt ein Ergebnis-Dict zurück.
-    """
-    try:
-        plan = llm_decide(user_message)
-        tool_name = plan["tool"]
-        args = plan["args"]
-
-        result = route_tool(tool_name, args)
-
-        return {
-            "tool": tool_name,
-            "args": args,
-            "result": result
-        }
-
-    except Exception as e:
-        return {"error": str(e)}
+    agent = create_agent(
+        model=llm, 
+        tools=tools, 
+    )
+    result = agent.invoke(prompt)
+    return result["messages"][-1].content

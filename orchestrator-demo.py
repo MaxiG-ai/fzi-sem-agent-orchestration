@@ -7,6 +7,7 @@
 #     "pandas==2.3.3",
 #     "python-dotenv==1.2.1",
 #     "streampipes==0.97.0",
+#     "utils==1.0.2",
 # ]
 # ///
 """
@@ -32,7 +33,7 @@ app = marimo.App(width="full")
 @app.cell
 def _():
     """Import required libraries for StreamPipes and data analysis."""
-    from agents.orchestrator import run_router
+    from orchestrator import run_router
     import marimo as mo
     return mo, run_router
 
@@ -44,17 +45,14 @@ def _(mo, run_router):
 
     mo.ui.chat(
         agent_router_wrapper_model,
-        prompts=["Erkläre mir den Zusammenhang zwischen temperature und density.", 
-                 "How are you?"
-                ],
-        show_configuration_controls=True
+        prompts=[
+            "Explain the relationship between temperature and density.",
+            "Plot a graph showing how temperature affects density.",
+        ],
+        show_configuration_controls=False,
+        allow_attachments=False,
+
     )
-    return
-
-
-@app.cell
-def _(run_router):
-    run_agent = run_router("Erkläre mir den Zusammenhang zwischen temperature und density.")
     return
 
 
