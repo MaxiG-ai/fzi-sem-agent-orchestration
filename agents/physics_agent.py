@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from agents.utils import get_azure_llm
