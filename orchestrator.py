@@ -1,133 +1,117 @@
-import os
-import pandas as pd
-from dotenv import load_dotenv
-import json
+# orchestrator/router.py
+from typing import TypedDict, Annotated
 
-from openai import OpenAI
-#LLM = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from langchain_core.tools import tool
+from langchain_core.messages import SystemMessage, HumanMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
 
+from agents.utils import get_azure_llm
 
-# =============================
-# Environment laden
-# =============================
-load_dotenv()
+# === Agents importieren ===
+from agents.statistics_agent import run_statistics_agent
+from agents.plot_agent import run_plot_agent
+from agents.physics_agent import run_physics_agent
 
-if os.getenv("OPENAI_API_KEY") is None:
-    raise ValueError("OPENAI_API_KEY fehlt in .env")
+class RouterState(TypedDict):
+    messages: Annotated[list, add_messages]
 
-# OpenAI Client erstellen
-LLM = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-# =============================
-# Agenten importieren
-# =============================
-from agents.AnoAgent import create_ano_agent
-from agents.physics_agent import run_agent as physics_agent  # physics_agent erwartet DataFrame
-from plot_agent.plot_agent import run_plot_agent  # unser neuer Plot-Agent
+# TOOLS (Wrapper for the sub-agents)
+@tool
+def call_statistics_agent(query: str) -> str:
+    """Calls the Statistics Agent to calculate max, min, or outliers."""
+    return str(run_statistics_agent(query))
 
+@tool
+def call_plot_agent(query: str) -> str:
+    """Calls the Plot Agent to generate charts and diagrams."""
+    return str(run_plot_agent(query))
 
-# =============================
-# CSV laden
-# =============================
-CSV_FILE = "data/sample_sensor_data.csv"
-df_sensor = pd.read_csv(CSV_FILE)
-print(f"Geladene Spalten: {', '.join(df_sensor.columns)}")
-
-SYSTEM_ROUTING_PROMPT = """
-Du bist ein Orchestrator-Agent, der entscheidet, welcher Agent eine Anfrage bearbeitet.
-
-Regeln:
-- statistics → für Max, Min, Ausreißer, Median
-- physics → für physikalische Berechnungen, Korrelationen, Beziehungen
-- plot → für Diagramme, Histogramme, Scatterplots, Zeitreihen
-
-Gib IMMER folgendes JSON zurück:
-{
-  "agent": "<statistics|physics|plot>"
-}
-
-Beispiele:
-User: "Zeige die Korrelation zwischen density und level"
-Antwort: { "agent": "physics" }
-
-User: "Erstelle ein Histogramm der Temperatur"
-Antwort: { "agent": "plot" }
-
-User: "Finde den maximalen Wert der mass_flow"
-Antwort: { "agent": "statistics" }
-"""
+@tool
+def call_physics_agent(query: str) -> str:
+    """Calls the Physics Agent to analyze physical relationships and correlations."""
+    return str(run_physics_agent(query))
 
 
+router_tools = [call_statistics_agent, call_plot_agent, call_physics_agent]
 
-# =============================
-# Orchestrator
-# =============================
-class OrchestratorAgent:
-    def __init__(self):
-        print("Orchestrator gestartet – aktuell aktiv: AnoAgent.")
-        
-        # Erstelle Agent-Instanzen und übergebe df_sensor
-        self.agents = {
-            "statistics": {
-                "agent": create_ano_agent(df_sensor),  # Statistik-Agent
-            },
-            "physics": {
-                "agent": lambda user_input: physics_agent(user_input, df_sensor),  # Physics-Agent
-            },
-            "plot": {
-                "agent": lambda user_input: run_plot_agent(user_input, df_sensor),  # Plot-Agent
-            },
-        }
+# ROUTER MODEL
 
-    # ----------------------------------------------
-    def route_to_agent(self, user_input: str):
-        """LLM entscheidet, welcher Agent die Anfrage bearbeiten soll."""
-        try:
-            response = LLM.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": SYSTEM_ROUTING_PROMPT},
-                    {"role": "user", "content": user_input},
-                ],
-                temperature=0,
-            )
-            agent_name = json.loads(response.choices[0].message.content)["agent"]
-            return self.agents.get(agent_name)["agent"]
-        except Exception as e:
-            print("⚠️ Fehler beim LLM-Routing:", e)
-            return None
+def router_decision(state: RouterState):
+    model = get_azure_llm()
     
-    #print(json.loads('{"agent":"plot"}')["agent"])
+    model = model.bind_tools(router_tools)
+
+    response = model.invoke(state["messages"])
+    return {"messages": [response]}
 
 
-    # ----------------------------------------------
-    def run(self, user_input: str):
-        """Hauptlogik: wählt Agent aus und führt ihn aus"""
-        agent = self.route_to_agent(user_input)
+def should_continue(state: RouterState):
+    last = state["messages"][-1]
+    if hasattr(last, "tool_calls") and last.tool_calls:
+        return "tools"
+    return END  
 
-        if agent is None:
-            return "❌ Kein passender Agent gefunden."
+# BUILD GRAPH
 
-        # Prüfe, ob es ein AgentExecutor (AnoAgent) oder Lambda (Physics-Agent) ist
-        if hasattr(agent, "invoke"):
-            result = agent.invoke({"input": user_input})
-            return result["output"]
-        else:
-            # Physics-Agent ist eine Funktion
-            return agent(user_input)
+graph = StateGraph(RouterState)
+
+graph.add_node("router", router_decision)
+graph.add_node("tools", ToolNode(router_tools))
+
+graph.add_edge(START, "router")
+graph.add_conditional_edges(
+    "router",
+    should_continue,
+    {
+        "tools": "tools",
+        END: END,
+    }
+)
+graph.add_edge("tools", "router")
+
+router_graph = graph.compile()
+
+# PUBLIC RUN FUNCTION
+
+def run_router(query: str) -> str:
+    initial = {
+        "messages": [
+            SystemMessage(
+                content="""\
+You are an intelligent Router Agent.
+
+Select one of the following agents based on the user query:
+
+1. Statistics Agent -> Max, Min, Outliers
+2. Plot Agent -> Diagrams, Charts, Visualization
+3. Physics Agent -> Physical relationships, formulas, correlations
+
+ALWAYS use a tool.
+"""
+            ),
+            HumanMessage(content=query),
+        ]
+    }
+
+    final_state = None
+    for event in router_graph.stream(initial):
+        final_state = event
+
+    messages = None
+    if "router" in final_state:
+        messages = final_state["router"]["messages"]
+    elif "__end__" in final_state:
+        messages = final_state["__end__"]["messages"]
+
+    for m in reversed(messages):
+        if hasattr(m, "content") and m.content:
+            return m.content
+
+    return "Keine Antwort gefunden."
 
 
-# =============================
-# CLI zum Testen
-# =============================
 if __name__ == "__main__":
-    orchestrator = OrchestratorAgent()
-
-    while True:
-        user_input = input(">> ").strip()
-        if user_input.lower() in ["exit", "quit", "stop"]:
-            print("Orchestrator beendet.")
-            break
-
-        output = orchestrator.run(user_input)
-        print("\nAntwort:\n", output, "\n")
-
+    print("Router Agent Test")
+    run_router("How is the correlation between temperature and pressure?")

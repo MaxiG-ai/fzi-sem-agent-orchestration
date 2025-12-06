@@ -50,9 +50,9 @@ def save_sensor_data_to_csv(df: pd.DataFrame, file_path: str):
     df.to_csv(file_path, index=False)
     print(f"✓ Sensor data saved to {file_path}")
     
-def load_sensor_data_from_csv(file_path: str) -> pd.DataFrame:
-    df = pd.read_csv(file_path)
-    print(f"✓ Loaded sensor data from {file_path}, {len(df)} data points")
+def load_sensor_data_from_csv() -> pd.DataFrame:
+    df = pd.read_csv("data/sample_sensor_data.csv")
+    print(f"✓ Loaded sensor data from subdir data, {len(df)} data points")
     return df
 
 if __name__ == "__main__":
