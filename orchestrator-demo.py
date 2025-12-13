@@ -39,6 +39,18 @@ def _():
 
 
 @app.cell
+def _(mo):
+    mo.md(r"""
+    # Sensor Data Analysis Agent
+
+    Use the chat interface below to interact with the Sensor Data Analysis Agent.
+
+    You can ask questions about the relationship between temperature and density, request data visualizations or let it explain physics.
+    """)
+    return
+
+
+@app.cell
 def _(mo, run_router):
     def agent_router_wrapper_model(messages, config):
         return run_router(messages[-1].content)
@@ -46,12 +58,12 @@ def _(mo, run_router):
     mo.ui.chat(
         agent_router_wrapper_model,
         prompts=[
+            "Can you show me how pressure and volume are related in the data?", # This results in an error since there is no pressure data. 
             "Explain the relationship between temperature and density.",
             "Plot a graph showing how temperature affects density.",
         ],
         show_configuration_controls=False,
         allow_attachments=False,
-
     )
     return
 

@@ -26,14 +26,14 @@ def normalize_column(df: pd.DataFrame, col: str) -> str:
     for c in df.columns:
         if col_lower == c.lower() or col_lower in c.lower():
             return c
-    raise ValueError(f"Spalte '{col}' nicht gefunden. Verfügbar: {list(df.columns)}")
+    raise ValueError(f"Column '{col}' not found. Available columns: {list(df.columns)}")
 
 
 def get_timestamp_column(df: pd.DataFrame) -> str:
     for c in df.columns:
         if "time" in c.lower():
             return c
-    raise ValueError("Keine Zeitspalte gefunden.")
+    raise ValueError("No timestamp column found in dataframe.")
 
 # TIME VALIDATION
 
