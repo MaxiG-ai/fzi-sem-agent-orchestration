@@ -77,6 +77,7 @@ def run_statistics_agent(user_query: str) -> str:
     agent = create_agent(
         model=llm, 
         tools=tools,
+        #callbacks=[lf_handler],
         )
 
     # 6. Execute

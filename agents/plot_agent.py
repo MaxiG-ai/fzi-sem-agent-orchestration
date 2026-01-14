@@ -180,7 +180,8 @@ def run_plot_agent(user_query: str) -> str:
 
     agent = create_agent(
         model=llm, 
-        tools=tools, 
+        tools=tools,
+        #callbacks=[lf_handler],
     )
     result = agent.invoke(prompt)
     return result["messages"][-1].content
