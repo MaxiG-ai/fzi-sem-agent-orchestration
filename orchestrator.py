@@ -1,5 +1,5 @@
 # orchestrator/router.py
-from typing import TypedDict, Annotated
+from typing import TypedDict, Annotated, Any, Optional
 
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -8,6 +8,8 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from agents.utils import get_azure_llm
+from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
+from langfuse.decorators import observe
 
 # === Agents importieren ===
 from agents.statistics_agent import run_statistics_agent
@@ -15,7 +17,12 @@ from agents.plot_agent import run_plot_agent
 from agents.physics_agent import run_physics_agent
 
 class RouterState(TypedDict):
+    """
+    State for the router graph.
+    messages is required, langfuse_handler is optional (accessed via .get()).
+    """
     messages: Annotated[list, add_messages]
+    # Note: langfuse_handler is optional and accessed via state.get("langfuse_handler")
 
 # TOOLS (Wrapper for the sub-agents)
 @tool
@@ -39,8 +46,11 @@ router_tools = [call_statistics_agent, call_plot_agent, call_physics_agent]
 # ROUTER MODEL
 
 def router_decision(state: RouterState):
-    model = get_azure_llm()
+    # Get Langfuse handler from state if available
+    langfuse_handler = state.get("langfuse_handler")
+    callbacks = [langfuse_handler] if langfuse_handler else None
     
+    model = get_azure_llm(callbacks=callbacks)
     model = model.bind_tools(router_tools)
 
     response = model.invoke(state["messages"])
@@ -75,7 +85,29 @@ router_graph = graph.compile()
 
 # PUBLIC RUN FUNCTION
 
+@observe()
 def run_router(query: str) -> str:
+    """
+    Run the router agent with Langfuse tracking.
+    
+    Args:
+        query: The user's query
+        
+    Returns:
+        The agent's response
+    """
+    # Setup Langfuse handler with comprehensive metadata
+    langfuse_handler = get_langfuse_handler(
+        trace_name="router_agent",
+        metadata={
+            "agent_type": "router",
+            "query": query,
+            "available_agents": ["statistics_agent", "plot_agent", "physics_agent"],
+            "orchestration_type": "langgraph"
+        },
+        tags=["agent", "router", "orchestration"],
+    )
+    
     initial = {
         "messages": [
             SystemMessage(
@@ -92,11 +124,15 @@ ALWAYS use a tool.
 """
             ),
             HumanMessage(content=query),
-        ]
+        ],
+        "langfuse_handler": langfuse_handler,
     }
 
+    # Configure callbacks for the graph execution
+    config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+    
     final_state = None
-    for event in router_graph.stream(initial):
+    for event in router_graph.stream(initial, config=config):
         final_state = event
 
     messages = None
@@ -107,8 +143,13 @@ ALWAYS use a tool.
 
     for m in reversed(messages):
         if hasattr(m, "content") and m.content:
-            return m.content
+            result = m.content
+            # Flush Langfuse handler
+            flush_langfuse_handler(langfuse_handler)
+            return result
 
+    # Flush Langfuse handler
+    flush_langfuse_handler(langfuse_handler)
     return "Keine Antwort gefunden."
 
 

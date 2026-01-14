@@ -10,6 +10,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
 from agents.utils import get_azure_llm
+from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
+from langfuse.decorators import observe
 
 from data.sp_data import load_sensor_data_from_csv
 
@@ -159,8 +161,31 @@ def plot_corr():
 
 # plot agent runner
 
+@observe()
 def run_plot_agent(user_query: str) -> str:
-    llm = get_azure_llm()
+    """
+    Run the plot agent with Langfuse tracking.
+    
+    Args:
+        user_query: The user's query for plotting
+        
+    Returns:
+        The agent's response
+    """
+    # 1. Setup Langfuse handler with metadata and tags
+    langfuse_handler = get_langfuse_handler(
+        trace_name="plot_agent",
+        metadata={
+            "agent_type": "visualization",
+            "query": user_query,
+            "tools": ["plot_time_series", "plot_histogram", "plot_scatter", "plot_corr"]
+        },
+        tags=["agent", "visualization", "plotting"],
+    )
+    
+    # 2. Setup LLM with Langfuse callback
+    callbacks = [langfuse_handler] if langfuse_handler else None
+    llm = get_azure_llm(callbacks=callbacks)
 
     # Define the list of tools
     tools = [plot_time_series, plot_histogram, plot_scatter, plot_corr]
@@ -182,5 +207,9 @@ def run_plot_agent(user_query: str) -> str:
         model=llm, 
         tools=tools, 
     )
-    result = agent.invoke(prompt)
+    result = agent.invoke(prompt, config={"callbacks": callbacks} if callbacks else {})
+    
+    # Flush Langfuse handler
+    flush_langfuse_handler(langfuse_handler)
+    
     return result["messages"][-1].content
