@@ -13,6 +13,23 @@ from langfuse import Langfuse
 load_dotenv()
 
 
+def _get_sample_rate() -> float:
+    """
+    Helper function to parse LANGFUSE_SAMPLE_RATE from environment.
+    
+    Returns:
+        Sample rate as float (default: 1.0)
+    
+    Raises:
+        ValueError: If LANGFUSE_SAMPLE_RATE is not a valid float
+    """
+    sample_rate_str = os.getenv("LANGFUSE_SAMPLE_RATE", "1.0")
+    try:
+        return float(sample_rate_str)
+    except ValueError:
+        raise ValueError(f"LANGFUSE_SAMPLE_RATE must be a valid float, got: {sample_rate_str}")
+
+
 def get_langfuse_client() -> Optional[Langfuse]:
     """
     Returns a configured Langfuse client if credentials are available.
@@ -37,7 +54,7 @@ def get_langfuse_client() -> Optional[Langfuse]:
             release=os.getenv("LANGFUSE_RELEASE"),
             debug=os.getenv("LANGFUSE_DEBUG", "false").lower() == "true",
             enabled=os.getenv("LANGFUSE_ENABLED", "true").lower() == "true",
-            sample_rate=float(os.getenv("LANGFUSE_SAMPLE_RATE", "1.0")),
+            sample_rate=_get_sample_rate(),
             environment=os.getenv("LANGFUSE_ENVIRONMENT", "production"),
         )
         return client
@@ -109,7 +126,7 @@ def get_langfuse_handler(
             release=os.getenv("LANGFUSE_RELEASE"),
             debug=os.getenv("LANGFUSE_DEBUG", "false").lower() == "true",
             enabled=os.getenv("LANGFUSE_ENABLED", "true").lower() == "true",
-            sample_rate=float(os.getenv("LANGFUSE_SAMPLE_RATE", "1.0")),
+            sample_rate=_get_sample_rate(),
             environment=os.getenv("LANGFUSE_ENVIRONMENT", "production"),
         )
         return handler
