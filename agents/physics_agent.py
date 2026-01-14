@@ -5,6 +5,8 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from agents.utils import get_azure_llm
+from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
+from langfuse.decorators import observe
 
 from data.sp_data import load_sensor_data_from_csv
 
@@ -15,6 +17,7 @@ from data.sp_data import load_sensor_data_from_csv
 # Global variable to hold data_json during execution
 _current_data_json = None
 
+@observe()
 @tool
 def calculate_correlations(columns: list[str]) -> str:
     """
@@ -56,6 +59,7 @@ def calculate_correlations(columns: list[str]) -> str:
         return json.dumps({"error": f"Correlation calculation failed: {str(e)}"})
 
 
+@observe()
 @tool
 def lookup_physics_formula(fields: list[str]) -> str:
     """
@@ -131,12 +135,29 @@ def lookup_physics_formula(fields: list[str]) -> str:
 
 # --- AGENT SETUP ---
 
+@observe()
 def run_physics_agent(user_query: str) -> str:
+    """
+    Run the physics agent with Langfuse tracking.
+    
+    Args:
+        user_query: The user's query for physics analysis
+        
+    Returns:
+        The agent's response
+    """
     global _current_data_json
     df = load_sensor_data_from_csv()
     _current_data_json = df.to_json()
 
-    llm = get_azure_llm()
+    # 1. Setup Langfuse handler
+    langfuse_handler = get_langfuse_handler(
+        trace_name="physics_agent",
+    )
+    
+    # 2. Setup LLM with Langfuse callback
+    callbacks = [langfuse_handler] if langfuse_handler else None
+    llm = get_azure_llm(callbacks=callbacks)
     tools = [calculate_correlations, lookup_physics_formula]
 
     system_message = f"""You are a physics-aware data analysis assistant. 
@@ -157,5 +178,9 @@ def run_physics_agent(user_query: str) -> str:
         tools=tools, 
         )
 
-    result = agent.invoke(prompt)
+    result = agent.invoke(prompt, config={"callbacks": callbacks} if callbacks else {})
+    
+    # Flush Langfuse handler
+    flush_langfuse_handler(langfuse_handler)
+    
     return result["messages"][-1].content

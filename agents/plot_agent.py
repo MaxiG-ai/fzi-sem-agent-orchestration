@@ -10,6 +10,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
 from agents.utils import get_azure_llm
+from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
+from langfuse.decorators import observe
 
 from data.sp_data import load_sensor_data_from_csv
 
@@ -63,6 +65,7 @@ def filter_df(df: pd.DataFrame, args: dict) -> pd.DataFrame:
 
 # PLOT FUNCTIONS
 
+@observe()
 @tool
 def plot_time_series(column: str):
     """Plot time series from a df for a column
@@ -87,6 +90,7 @@ def plot_time_series(column: str):
     return {"path": path}
 
 
+@observe()
 @tool
 def plot_histogram(column: str, bins: int = 30):
     """Plot histogram for a specific column from a df.
@@ -111,6 +115,7 @@ def plot_histogram(column: str, bins: int = 30):
     return {"path": path}
 
 
+@observe()
 @tool
 def plot_scatter(x_col: str, y_col: str):
     """Plot scatter plot for two columns from a df.
@@ -135,6 +140,7 @@ def plot_scatter(x_col: str, y_col: str):
     return {"path": path}
 
 
+@observe()
 @tool
 def plot_corr():
     """Plot correlation matrix for numeric columns in a df.
@@ -159,8 +165,26 @@ def plot_corr():
 
 # plot agent runner
 
+@observe()
+@observe()
 def run_plot_agent(user_query: str) -> str:
-    llm = get_azure_llm()
+    """
+    Run the plot agent with Langfuse tracking.
+    
+    Args:
+        user_query: The user's query for plotting
+        
+    Returns:
+        The agent's response
+    """
+    # 1. Setup Langfuse handler
+    langfuse_handler = get_langfuse_handler(
+        trace_name="plot_agent",
+    )
+    
+    # 2. Setup LLM with Langfuse callback
+    callbacks = [langfuse_handler] if langfuse_handler else None
+    llm = get_azure_llm(callbacks=callbacks)
 
     # Define the list of tools
     tools = [plot_time_series, plot_histogram, plot_scatter, plot_corr]
@@ -182,5 +206,9 @@ def run_plot_agent(user_query: str) -> str:
         model=llm, 
         tools=tools, 
     )
-    result = agent.invoke(prompt)
+    result = agent.invoke(prompt, config={"callbacks": callbacks} if callbacks else {})
+    
+    # Flush Langfuse handler
+    flush_langfuse_handler(langfuse_handler)
+    
     return result["messages"][-1].content

@@ -8,6 +8,8 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from agents.utils import get_azure_llm
+from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
+from langfuse.decorators import observe
 
 # === Agents importieren ===
 from agents.statistics_agent import run_statistics_agent
@@ -18,16 +20,19 @@ class RouterState(TypedDict):
     messages: Annotated[list, add_messages]
 
 # TOOLS (Wrapper for the sub-agents)
+@observe()
 @tool
 def call_statistics_agent(query: str) -> str:
     """Calls the Statistics Agent to calculate max, min, or outliers."""
     return str(run_statistics_agent(query))
 
+@observe()
 @tool
 def call_plot_agent(query: str) -> str:
     """Calls the Plot Agent to generate charts and diagrams."""
     return str(run_plot_agent(query))
 
+@observe()
 @tool
 def call_physics_agent(query: str) -> str:
     """Calls the Physics Agent to analyze physical relationships and correlations."""
@@ -36,11 +41,19 @@ def call_physics_agent(query: str) -> str:
 
 router_tools = [call_statistics_agent, call_plot_agent, call_physics_agent]
 
+# Store langfuse handler in state for passing between nodes
+class RouterStateWithCallbacks(TypedDict):
+    messages: Annotated[list, add_messages]
+    langfuse_handler: object  # Store handler reference
+
 # ROUTER MODEL
 
 def router_decision(state: RouterState):
-    model = get_azure_llm()
+    # Get Langfuse handler from state if available
+    langfuse_handler = state.get("langfuse_handler")
+    callbacks = [langfuse_handler] if langfuse_handler else None
     
+    model = get_azure_llm(callbacks=callbacks)
     model = model.bind_tools(router_tools)
 
     response = model.invoke(state["messages"])
@@ -75,7 +88,22 @@ router_graph = graph.compile()
 
 # PUBLIC RUN FUNCTION
 
+@observe()
 def run_router(query: str) -> str:
+    """
+    Run the router agent with Langfuse tracking.
+    
+    Args:
+        query: The user's query
+        
+    Returns:
+        The agent's response
+    """
+    # Setup Langfuse handler
+    langfuse_handler = get_langfuse_handler(
+        trace_name="router_agent",
+    )
+    
     initial = {
         "messages": [
             SystemMessage(
@@ -92,11 +120,15 @@ ALWAYS use a tool.
 """
             ),
             HumanMessage(content=query),
-        ]
+        ],
+        "langfuse_handler": langfuse_handler,
     }
 
+    # Configure callbacks for the graph execution
+    config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+    
     final_state = None
-    for event in router_graph.stream(initial):
+    for event in router_graph.stream(initial, config=config):
         final_state = event
 
     messages = None
@@ -107,8 +139,13 @@ ALWAYS use a tool.
 
     for m in reversed(messages):
         if hasattr(m, "content") and m.content:
-            return m.content
+            result = m.content
+            # Flush Langfuse handler
+            flush_langfuse_handler(langfuse_handler)
+            return result
 
+    # Flush Langfuse handler
+    flush_langfuse_handler(langfuse_handler)
     return "Keine Antwort gefunden."
 
 
