@@ -162,7 +162,6 @@ def plot_corr():
 # plot agent runner
 
 @observe()
-@observe()
 def run_plot_agent(user_query: str) -> str:
     """
     Run the plot agent with Langfuse tracking.
