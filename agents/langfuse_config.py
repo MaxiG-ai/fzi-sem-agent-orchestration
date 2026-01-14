@@ -41,6 +41,9 @@ def get_langfuse_client() -> Optional[Langfuse]:
             environment=os.getenv("LANGFUSE_ENVIRONMENT", "production"),
         )
         return client
+    except ValueError as e:
+        print(f"Warning: Invalid Langfuse configuration value: {e}")
+        return None
     except Exception as e:
         print(f"Warning: Failed to initialize Langfuse client: {e}")
         return None
@@ -110,6 +113,9 @@ def get_langfuse_handler(
             environment=os.getenv("LANGFUSE_ENVIRONMENT", "production"),
         )
         return handler
+    except ValueError as e:
+        print(f"Warning: Invalid Langfuse configuration value: {e}")
+        return None
     except Exception as e:
         print(f"Warning: Failed to initialize Langfuse handler: {e}")
         return None

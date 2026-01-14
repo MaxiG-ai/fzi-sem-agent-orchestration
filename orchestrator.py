@@ -1,5 +1,5 @@
 # orchestrator/router.py
-from typing import TypedDict, Annotated, Any
+from typing import TypedDict, Annotated, Any, Optional
 
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -16,13 +16,13 @@ from agents.statistics_agent import run_statistics_agent
 from agents.plot_agent import run_plot_agent
 from agents.physics_agent import run_physics_agent
 
-class RouterState(TypedDict, total=False):
+class RouterState(TypedDict):
     """
     State for the router graph.
-    Using total=False allows optional fields like langfuse_handler.
+    messages is required, langfuse_handler is optional (accessed via .get()).
     """
     messages: Annotated[list, add_messages]
-    langfuse_handler: Any  # Optional: Langfuse callback handler
+    # Note: langfuse_handler is optional and accessed via state.get("langfuse_handler")
 
 # TOOLS (Wrapper for the sub-agents)
 @tool
