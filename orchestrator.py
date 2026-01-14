@@ -20,19 +20,16 @@ class RouterState(TypedDict):
     messages: Annotated[list, add_messages]
 
 # TOOLS (Wrapper for the sub-agents)
-@observe()
 @tool
 def call_statistics_agent(query: str) -> str:
     """Calls the Statistics Agent to calculate max, min, or outliers."""
     return str(run_statistics_agent(query))
 
-@observe()
 @tool
 def call_plot_agent(query: str) -> str:
     """Calls the Plot Agent to generate charts and diagrams."""
     return str(run_plot_agent(query))
 
-@observe()
 @tool
 def call_physics_agent(query: str) -> str:
     """Calls the Physics Agent to analyze physical relationships and correlations."""
@@ -99,9 +96,16 @@ def run_router(query: str) -> str:
     Returns:
         The agent's response
     """
-    # Setup Langfuse handler
+    # Setup Langfuse handler with comprehensive metadata
     langfuse_handler = get_langfuse_handler(
         trace_name="router_agent",
+        metadata={
+            "agent_type": "router",
+            "query": query,
+            "available_agents": ["statistics_agent", "plot_agent", "physics_agent"],
+            "orchestration_type": "langgraph"
+        },
+        tags=["agent", "router", "orchestration"],
     )
     
     initial = {

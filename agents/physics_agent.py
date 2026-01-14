@@ -17,7 +17,6 @@ from data.sp_data import load_sensor_data_from_csv
 # Global variable to hold data_json during execution
 _current_data_json = None
 
-@observe()
 @tool
 def calculate_correlations(columns: list[str]) -> str:
     """
@@ -59,7 +58,6 @@ def calculate_correlations(columns: list[str]) -> str:
         return json.dumps({"error": f"Correlation calculation failed: {str(e)}"})
 
 
-@observe()
 @tool
 def lookup_physics_formula(fields: list[str]) -> str:
     """
@@ -150,9 +148,16 @@ def run_physics_agent(user_query: str) -> str:
     df = load_sensor_data_from_csv()
     _current_data_json = df.to_json()
 
-    # 1. Setup Langfuse handler
+    # 1. Setup Langfuse handler with metadata and tags
     langfuse_handler = get_langfuse_handler(
         trace_name="physics_agent",
+        metadata={
+            "agent_type": "physics",
+            "query": user_query,
+            "tools": ["calculate_correlations", "lookup_physics_formula"],
+            "data_columns": df.columns.tolist()
+        },
+        tags=["agent", "physics", "data-analysis", "correlation"],
     )
     
     # 2. Setup LLM with Langfuse callback

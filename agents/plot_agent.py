@@ -65,7 +65,6 @@ def filter_df(df: pd.DataFrame, args: dict) -> pd.DataFrame:
 
 # PLOT FUNCTIONS
 
-@observe()
 @tool
 def plot_time_series(column: str):
     """Plot time series from a df for a column
@@ -90,7 +89,6 @@ def plot_time_series(column: str):
     return {"path": path}
 
 
-@observe()
 @tool
 def plot_histogram(column: str, bins: int = 30):
     """Plot histogram for a specific column from a df.
@@ -115,7 +113,6 @@ def plot_histogram(column: str, bins: int = 30):
     return {"path": path}
 
 
-@observe()
 @tool
 def plot_scatter(x_col: str, y_col: str):
     """Plot scatter plot for two columns from a df.
@@ -140,7 +137,6 @@ def plot_scatter(x_col: str, y_col: str):
     return {"path": path}
 
 
-@observe()
 @tool
 def plot_corr():
     """Plot correlation matrix for numeric columns in a df.
@@ -177,9 +173,15 @@ def run_plot_agent(user_query: str) -> str:
     Returns:
         The agent's response
     """
-    # 1. Setup Langfuse handler
+    # 1. Setup Langfuse handler with metadata and tags
     langfuse_handler = get_langfuse_handler(
         trace_name="plot_agent",
+        metadata={
+            "agent_type": "visualization",
+            "query": user_query,
+            "tools": ["plot_time_series", "plot_histogram", "plot_scatter", "plot_corr"]
+        },
+        tags=["agent", "visualization", "plotting"],
     )
     
     # 2. Setup LLM with Langfuse callback

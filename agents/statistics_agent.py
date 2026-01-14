@@ -9,7 +9,6 @@ from langfuse.decorators import observe
 # --- TOOLS (Docstrings translated to English for the LLM) ---
 
 
-@observe()
 @tool
 def get_max_value(column_name: str):
     """Returns the maximum value of a specified column."""
@@ -19,7 +18,6 @@ def get_max_value(column_name: str):
     return float(df[column_name].max())
 
 
-@observe()
 @tool
 def get_min_value(column_name: str):
     """Returns the minimum value of a specified column."""
@@ -29,7 +27,6 @@ def get_min_value(column_name: str):
     return float(df[column_name].min())
 
 
-@observe()
 @tool
 def detect_outliers_above(column_name: str, threshold_value: float):
     """Finds outliers above a certain threshold value."""
@@ -40,7 +37,6 @@ def detect_outliers_above(column_name: str, threshold_value: float):
     return outliers.to_dict(orient="records")
 
 
-@observe()
 @tool
 def detect_outliers_below(column_name: str, threshold_value: float):
     """Finds outliers below a certain threshold value."""
@@ -65,9 +61,15 @@ def run_statistics_agent(user_query: str) -> str:
     Returns:
         The agent's response
     """
-    # 1. Setup Langfuse handler
+    # 1. Setup Langfuse handler with metadata and tags
     langfuse_handler = get_langfuse_handler(
         trace_name="statistics_agent",
+        metadata={
+            "agent_type": "statistics",
+            "query": user_query,
+            "tools": ["get_max_value", "get_min_value", "detect_outliers_above", "detect_outliers_below"]
+        },
+        tags=["agent", "statistics", "data-analysis"],
     )
     
     # 2. Setup LLM with Langfuse callback
