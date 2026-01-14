@@ -1,0 +1,121 @@
+prompt
+Was ist das Maximum von temperature?
+Gib mir den höchsten Wert der Spalte mass_flow.
+Wie hoch ist das Minimum von volume_flow?
+Was ist der kleinste gemessene Wert von density?
+Welchen Maximalwert erreicht temperature im Datensatz?
+Wie hoch ist der größte Messwert von mass_flow?
+Was ist der niedrigste Wert von temperature?
+Bestimme das Minimum der Spalte density.
+Berechne den Mittelwert von temperature.
+Wie hoch ist der Durchschnitt von mass_flow?
+Gib mir den Mittelwert von volume_flow.
+Wie groß ist der durchschnittliche Wert von density?
+Berechne den arithmetischen Mittelwert der Temperatur.
+Gibt es Ausreißer in temperature über 80?
+Finde alle Werte von mass_flow über 10.
+Gibt es Messwerte von volume_flow über 9?
+Liste alle Ausreißer von density über 55.
+Prüfe ob temperature ungewöhnlich hohe Werte über 90 hat.
+Gibt es Ausreißer von temperature unter 10?
+Finde alle mass_flow Werte unter 0.5.
+Gibt es ungewöhnlich niedrige density-Werte unter 30?
+Prüfe volume_flow auf Werte kleiner als 0.2.
+Vergleiche das Maximum von temperature und density.
+Welche Spalte hat den höheren Maximalwert: mass_flow oder volume_flow?
+Vergleiche Minimum und Maximum von temperature.
+Welche Variable schwankt stärker: density oder temperature?
+Wie groß ist die Spannweite (max–min) von mass_flow?
+Hat volume_flow eine größere Streuung als mass_flow?
+Welcher Sensorwert hat den höchsten Einzelwert im Datensatz?
+Welche Spalte weist die niedrigsten Messwerte auf?
+Bitte ein Zeitreihen-Diagramm von temperature.
+Zeige mir die Zeitreihe von mass_flow.
+Erstelle einen Plot von volume_flow über die Zeit.
+Visualisiere die zeitliche Entwicklung von density.
+Plot über Zeit: temperature.
+Erstelle ein Histogramm von temperature.
+Zeige die Verteilung von mass_flow als Histogramm.
+Histogramm der Spalte volume_flow.
+Wie ist die Werteverteilung von density?
+Bitte ein Histogramm für temperature.
+Scatter Plot von mass_flow gegen volume_flow.
+Zeige density vs temperature als Scatterplot.
+Erstelle ein Streudiagramm von volume_flow gegen density.
+Scatter Plot: temperature vs density.
+Visualisiere den Zusammenhang zwischen mass_flow und volume_flow.
+Erstelle eine Korrelationsmatrix.
+Zeige die Korrelationsmatrix aller numerischen Spalten.
+Visualisiere die Korrelationen im Datensatz.
+Korrelationen zwischen allen Sensorwerten anzeigen.
+Bitte eine Heatmap der Korrelationen.
+Zeige erst die Zeitreihe von temperature und dann ein Histogramm.
+Erstelle einen Scatterplot und zusätzlich eine Korrelationsmatrix.
+Wie sieht die Verteilung von mass_flow aus? (Histogramm)
+Stelle temperature als Zeitreihe dar.
+Visualisiere volume_flow im Zeitverlauf.
+Scatter: density gegen temperature.
+Erzeuge ein Diagramm für mass_flow über die Zeit.
+Histogramm von density bitte.
+Korrelation zwischen mass_flow und volume_flow visualisieren.
+Überblick über alle Korrelationen als Plot.
+Wie hängen mass_flow und volume_flow physikalisch zusammen?
+Erkläre den physikalischen Zusammenhang zwischen mass_flow und volume_flow.
+Welche Formel beschreibt die Beziehung zwischen mass_flow und volume_flow?
+Berechne die Korrelation zwischen mass_flow und volume_flow und erkläre sie physikalisch.
+Erwartet man eine starke Korrelation zwischen mass_flow und volume_flow? Warum?
+Welche Rolle spielt density im Zusammenhang zwischen mass_flow und volume_flow?
+Prüfe die Korrelationen zwischen density und mass_flow und volume_flow.
+Welche physikalische Beziehung verbindet density mit mass_flow?
+Erkläre warum mass_flow von density abhängt.
+Stimmen die gemessenen Daten mit mass_flow = density _ volume_flow überein?
+Wie hängen temperature und density physikalisch zusammen?
+Prüfe die Korrelation zwischen temperature und density.
+Welche thermodynamische Beziehung erklärt den Zusammenhang zwischen temperature und density?
+Gibt es Hinweise auf thermische Ausdehnung in den Daten?
+Erkläre den Einfluss von temperature auf density anhand der Messwerte.
+Welche physikalischen Zusammenhänge lassen sich aus den Korrelationen ableiten?
+Gibt es Variablen die sich physikalisch konsistent verhalten?
+Analysiere die Daten aus physikalischer Sicht.
+Welche Sensorwerte sollten theoretisch stark korreliert sein?
+Stimmen Theorie und Messdaten überein?
+Welche Annahmen müssen gelten damit mass_flow proportional zu volume_flow ist?
+Wie würde sich eine konstante density auf die Korrelation auswirken?
+Welche physikalischen Effekte könnten Abweichungen erklären?
+Kann man aus den Daten auf stationären Betrieb schließen?
+Gibt es physikalisch unerwartete Zusammenhänge im Datensatz?
+Wie würdest du die physikalische Konsistenz der Sensorik bewerten?
+Welche Größen beeinflussen mass_flow am stärksten?
+Welche Rolle spielt temperature für die Durchflussmessung?
+Sind die Korrelationen physikalisch plausibel?
+Fasse die wichtigsten physikalischen Erkenntnisse aus den Daten zusammen.
+Was ist das Maximum von temp?
+Gib mir den höchsten Wert von pressure.
+Wie hoch ist der Maximalwert?
+Gibt es Ausreißer über 1000?
+Zeig mir den Durchschnitt der Sensoren.
+Was ist das Minimum der letzten Messung?
+Wie groß ist der Mittelwert von flow?
+Gibt es extreme Werte im Datensatz?
+Was ist der höchste Temperaturwert gestern?
+Berechne das Maximum von temperatur!!!
+Mach mal einen Plot.
+Zeig mir ein Diagram von tempreature.
+Zeitreihe bitte.
+Histogramm von pressure.
+Scatter Plot von Temperatur.
+Mach ein schönes Diagramm.
+Korrelation von allem.
+Plot volume gegen time.
+Visualisiere die Sensorwerte.
+Zeige mir den Verlauf.
+Wie hängen flow und masse physikalisch zusammen?
+Erkläre den Zusammenhang der Sensoren.
+Gibt es physikalische Probleme in den Daten?
+Sind die Daten physikalisch korrekt?
+Warum ist mass_flow manchmal größer?
+Erkläre die Physik hinter temperature.
+Wie wirkt sich wärme auf alles aus?
+Gibt es eine Formel für flow?
+Stimmen die Messungen mit der Realität überein?
+Berechne die physikalische Korrektheit.

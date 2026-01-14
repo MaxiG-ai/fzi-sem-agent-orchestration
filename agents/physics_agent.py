@@ -1,161 +1,219 @@
+# agents/physics_agent.py
+import os
 import json
 import pandas as pd
+from typing import TypedDict, Annotated
+from dotenv import load_dotenv
+from functools import wraps
 
-from langchain_core.tools import tool
-from langchain.agents import create_agent
+from langsmith import traceable
 from langchain_core.messages import HumanMessage, SystemMessage
-from agents.utils import get_azure_llm
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
 
-from data.sp_data import load_sensor_data_from_csv
+from orchestrator.observability import setup_observability, get_langfuse_callbacks, get_langfuse_observe
 
-# ============================================================================
-# TOOL IMPLEMENTATIONS
-# ============================================================================
+load_dotenv()
+setup_observability("agent_fzi_test")
+LANGFUSE_CALLBACKS = get_langfuse_callbacks()
+observe = get_langfuse_observe()
 
-# Global variable to hold data_json during execution
-_current_data_json = None
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY fehlt in .env")
 
-@tool
-def calculate_correlations(columns: list[str]) -> str:
+
+# -----------------------------------------------------------------------------
+# Helper: observe decorator that preserves __name__/__doc__ (important for @tool)
+# -----------------------------------------------------------------------------
+def observe_keep_meta(name: str):
     """
-    Calculate Pearson correlation coefficients between specified data columns.
-    
-    Args:
-        columns: List of column names to correlate. Empty list = correlate all numeric columns.
-        
-    Returns:
-        JSON string containing correlation matrix or error message
+    Wraps langfuse observe decorator, but preserves function metadata so
+    langchain @tool does not complain about missing docstrings.
     """
-    global _current_data_json
-    
+    def deco(fn):
+        decorated = observe(name=name)(fn)
+
+        @wraps(fn)
+        def _wrapped(*args, **kwargs):
+            return decorated(*args, **kwargs)
+
+        # ensure original docstring/name survive
+        _wrapped.__doc__ = fn.__doc__
+        _wrapped.__name__ = fn.__name__
+        return _wrapped
+
+    return deco
+
+
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+    data_json: str
+
+
+_current_data_json: str | None = None
+
+
+def _df_from_json(data_json: str) -> pd.DataFrame:
     try:
-        # Deserialize the dataframe from global state
+        return pd.read_json(data_json)
+    except ValueError:
         from io import StringIO
-        df = pd.read_json(StringIO(_current_data_json))
-        
+        return pd.read_json(StringIO(data_json))
+
+
+@tool(description="Berechnet Pearson-Korrelationen für ausgewählte Spalten (leer = alle numerischen).")
+@observe_keep_meta(name="physics.calculate_correlations")
+def calculate_correlations(columns: list[str]) -> str:
+    """Berechnet Pearson-Korrelationen für ausgewählte Spalten (leer = alle numerischen)."""
+    global _current_data_json
+    if not _current_data_json:
+        return json.dumps({"error": "No data loaded."}, indent=2)
+
+    try:
+        df = _df_from_json(_current_data_json)
+
         if not columns:
-            # Correlate all numeric columns if none specified
             corr_matrix = df.corr(numeric_only=True)
         else:
-            # Filter to only requested columns that exist in the dataframe
             available = [c for c in columns if c in df.columns]
             if not available:
-                return json.dumps({"error": "No valid columns found in dataframe"})
+                return json.dumps(
+                    {"error": "No valid columns", "available": df.columns.tolist()},
+                    indent=2,
+                )
             corr_matrix = df[available].corr()
-        
-        # Format correlations as nested dictionary (excluding self-correlations)
+
         result = {}
-        for col1 in corr_matrix.columns:
-            result[col1] = {}
-            for col2 in corr_matrix.columns:
-                if col1 != col2:  # Skip diagonal (self-correlation = 1.0)
-                    result[col1][col2] = round(corr_matrix.loc[col1, col2], 4)
-        
-        return json.dumps(result, indent=2)
+        for c1 in corr_matrix.columns:
+            result[c1] = {}
+            for c2 in corr_matrix.columns:
+                if c1 != c2:
+                    result[c1][c2] = round(float(corr_matrix.loc[c1, c2]), 4)
+
+        return json.dumps({"correlations": result}, indent=2)
+
     except Exception as e:
-        return json.dumps({"error": f"Correlation calculation failed: {str(e)}"})
+        return json.dumps({"error": str(e)}, indent=2)
 
 
-@tool
+@tool(description="Sucht passende Physik-Formeln zu den Feldern (kleine Wissensbasis).")
+@observe_keep_meta(name="physics.lookup_physics_formula")
 def lookup_physics_formula(fields: list[str]) -> str:
-    """
-    Look up physics formulas and relationships for specified sensor fields.
-    
-    This function contains a knowledge base of common fluid mechanics and thermodynamics
-    relationships relevant to industrial sensor data.
-    
-    Args:
-        fields: List of field names (e.g., ['mass_flow', 'density', 'temperature'])
-        
-    Returns:
-        JSON string containing relevant formulas with context and units
-    """
-    try:
-        # Knowledge base of physics formulas
-        # Each entry maps field combinations to their physical relationships
-        formula_db = {
-            ("mass_flow", "volume_flow", "density"): {
-                "formula": "mass_flow = density × volume_flow",
-                "latex": "\\dot{m} = \\rho \\times \\dot{V}",
-                "context": "Fundamental relationship in fluid mechanics. Mass flow rate equals fluid density multiplied by volumetric flow rate.",
-                "units": "kg/s = (kg/m³) × (m³/s)",
-            },
-            ("mass_flow", "density"): {
-                "formula": "mass_flow = density × volume_flow",
-                "latex": "\\dot{m} = \\rho \\times \\dot{V}",
-                "context": "Mass flow rate is proportional to density. Higher density fluids carry more mass at same volumetric flow.",
-                "units": "kg/s ∝ kg/m³",
-            },
-            ("temperature", "density"): {
-                "formula": "density ≈ ρ₀ × (1 - β × ΔT)",
-                "latex": "\\rho \\approx \\rho_0 (1 - \\beta \\Delta T)",
-                "context": "Thermal expansion relationship. Most fluids decrease in density as temperature increases (volumetric expansion).",
-                "units": "β is thermal expansion coefficient (K⁻¹)",
-            },
-            ("level", "volume_flow"): {
-                "formula": "dLevel/dt ∝ volume_flow",
-                "latex": "\\frac{d(Level)}{dt} \\propto \\dot{V}",
-                "context": "Container level changes proportionally to net volumetric flow rate. Positive flow increases level, negative decreases it.",
-                "units": "m/s ∝ m³/s (depends on container cross-section)",
-            },
-            ("mass_flow", "volume_flow"): {
-                "formula": "mass_flow = density × volume_flow",
-                "latex": "\\dot{m} = \\rho \\times \\dot{V}",
-                "context": "These should be highly correlated if density is relatively constant.",
-                "units": "kg/s = (kg/m³) × (m³/s)",
-            },
-        }
-        
-        # Normalize field names to lowercase and sort for matching
-        normalized = tuple(sorted([f.lower() for f in fields]))
-        
-        # Find all formulas that include the requested fields
-        results = []
-        for formula_fields, formula_data in formula_db.items():
-            if set(normalized).issubset(set(formula_fields)):
-                results.append(formula_data)
-        
-        if results:
-            return json.dumps({"formulas": results}, indent=2)
-        else:
-            return json.dumps({
-                "formulas": [{
-                    "formula": "No direct formula found",
-                    "context": f"No built-in formula for: {', '.join(fields)}",
-                    "suggestion": "Try querying with different field combinations or individual field pairs",
-                }]
-            }, indent=2)
-            
-    except Exception as e:
-        return json.dumps({"error": f"Formula lookup failed: {str(e)}"})
-
-# --- AGENT SETUP ---
-
-def run_physics_agent(user_query: str) -> str:
-    global _current_data_json
-    df = load_sensor_data_from_csv()
-    _current_data_json = df.to_json()
-
-    llm = get_azure_llm()
-    tools = [calculate_correlations, lookup_physics_formula]
-
-    system_message = f"""You are a physics-aware data analysis assistant. 
-    Available sensor columns: {", ".join(df.columns.tolist())}
-    Use the tools to analyze correlations and explain physical relationships.
-    """
-
-    prompt = {
-        "messages": [
-            SystemMessage(content=system_message),
-            HumanMessage(content=user_query),
-        ],
-        "placeholder": "{agent_scratchpad}",
+    """Sucht passende Physik-Formeln zu den Feldern (kleine Wissensbasis)."""
+    formula_db = {
+        ("mass_flow", "volume_flow", "density"): {
+            "formula": "mass_flow = density × volume_flow",
+            "context": "Fundamentaler Zusammenhang: Massenstrom = Dichte * Volumenstrom.",
+            "units": "kg/s = (kg/m³) × (m³/s)",
+        },
+        ("temperature", "density"): {
+            "formula": "density ≈ ρ₀ × (1 - β × ΔT)",
+            "context": "Thermische Ausdehnung: Dichte sinkt oft mit steigender Temperatur.",
+            "units": "β in K⁻¹",
+        },
     }
 
-    agent = create_agent(
-        model=llm, 
-        tools=tools, 
-        )
+    norm = tuple(sorted([f.lower() for f in fields]))
+    hits = []
+    for k, v in formula_db.items():
+        if set(norm).issubset(set(k)):
+            hits.append(v)
 
-    result = agent.invoke(prompt)
-    return result["messages"][-1].content
+    if hits:
+        return json.dumps({"formulas": hits}, indent=2)
+
+    return json.dumps({"formulas": [{"formula": "No direct formula found", "fields": fields}]}, indent=2)
+
+
+TOOLS = [calculate_correlations, lookup_physics_formula]
+
+
+def should_continue(state: AgentState) -> str:
+    last = state["messages"][-1]
+    if hasattr(last, "tool_calls") and last.tool_calls:
+        return "tools"
+    return END
+
+
+def call_model(state: AgentState):
+    model = ChatOpenAI(
+        model="gpt-4o-mini",
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+    ).bind_tools(TOOLS)
+
+    if LANGFUSE_CALLBACKS:
+        resp = model.invoke(state["messages"], config={"callbacks": LANGFUSE_CALLBACKS})
+    else:
+        resp = model.invoke(state["messages"])
+
+    return {"messages": [resp]}
+
+
+workflow = StateGraph(AgentState)
+workflow.add_node("agent", call_model)
+workflow.add_node("tools", ToolNode(TOOLS))
+workflow.add_edge(START, "agent")
+workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+workflow.add_edge("tools", "agent")
+graph = workflow.compile()
+
+
+@traceable(name="run_physics_agent")
+@observe(name="physics.run_physics_agent")
+def run_physics_agent(user_message: str, df: pd.DataFrame, max_iterations: int = 10) -> str:
+    global _current_data_json
+    _current_data_json = df.to_json()
+
+    system_prompt = f"""\
+You are a physics-aware data analysis assistant for industrial sensor data.
+
+Available columns: {', '.join(df.columns.tolist())}
+
+CRITICAL:
+- If the user asks about relationships/dependencies/consistency:
+  1) call calculate_correlations on relevant columns
+  2) call lookup_physics_formula on relevant fields
+- Do not invent numeric values. Use tool output.
+- Keep final answer concise.
+"""
+
+    initial_state: AgentState = {
+        "messages": [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_message),
+        ],
+        "data_json": _current_data_json,
+    }
+
+    final = None
+
+    # ✅ LangGraph: recursion_limit kommt in config (nicht als 2. positional dict!)
+    config = {"recursion_limit": max_iterations}
+    if LANGFUSE_CALLBACKS:
+        config["callbacks"] = LANGFUSE_CALLBACKS
+
+    for event in graph.stream(initial_state, config=config):
+        final = event
+
+    if final is None:
+        return "No response."
+
+    msgs = None
+    if "agent" in final:
+        msgs = final["agent"]["messages"]
+    elif "__end__" in final:
+        msgs = final["__end__"]["messages"]
+
+    if not msgs:
+        return "No response."
+
+    for m in reversed(msgs):
+        if getattr(m, "content", None):
+            return m.content
+
+    return "No response."

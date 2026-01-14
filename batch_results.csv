@@ -1,0 +1,6 @@
+idx,timestamp,prompt,status,duration_ms,answer,error
+1,2026-01-14T15:38:23,Was ist das Maximum von tem erature?,ok,5417,Das Maximum der Temperatur beträgt 100.9978.,
+2,2026-01-14T15:38:28,Gib mir den hšchsten Wert der S alte mass_flow.,ok,4775,"Der höchste Wert der Spalte ""mass_flow"" beträgt 10.993267059326172.",
+3,2026-01-14T15:38:33,Wie hoch ist das Minimum von volume_flow?,ok,4807,Das Minimum von `volume_flow` beträgt 0.0022872362751513.,
+4,2026-01-14T15:38:37,Was ist der kleinste gemessene Wert von density?,ok,3605,"Der kleinste gemessene Wert von ""density"" beträgt 40.0033.",
+5,2026-01-14T15:38:42,Welchen Maximalwert erreicht tem erature im Datensatz?,ok,4873,Der Maximalwert der Temperatur im Datensatz beträgt 100.9978 °C.,
