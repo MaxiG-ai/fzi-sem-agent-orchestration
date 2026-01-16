@@ -7,7 +7,7 @@ and https://python.reference.langfuse.com/langfuse
 import os
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
-from langfuse.callback import CallbackHandler
+from langfuse.langchain import CallbackHandler
 from langfuse import Langfuse
 
 load_dotenv()
@@ -75,55 +75,69 @@ def get_langfuse_handler(
     version: Optional[str] = None,
 ) -> Optional[CallbackHandler]:
     """
-    Returns a configured Langfuse CallbackHandler for LangChain integration.
-    
-    The CallbackHandler automatically captures:
-    - All LLM calls with prompts, completions, and token usage
-    - Tool invocations with inputs and outputs
-    - Agent reasoning steps and decisions
-    - Chain executions with intermediate steps
-    
-    Args:
-        session_id: Optional session identifier for grouping related traces
-        user_id: Optional user identifier for tracking per-user metrics
-        trace_name: Optional name for the trace (e.g., "router_agent", "statistics_agent")
-        metadata: Optional dictionary of custom metadata to attach to the trace
-        tags: Optional list of tags for filtering and organizing traces
-        version: Optional version identifier for A/B testing and deployment tracking
-        
+    Returns a configured Langfuse CallbackHandler for LangChain integration (v3+).
+
+    In Langfuse v3+, CallbackHandler takes minimal parameters.
+    Configuration is read from environment variables:
+    - LANGFUSE_PUBLIC_KEY (required)
+    - LANGFUSE_SECRET_KEY (required)
+    - LANGFUSE_HOST (default: https://cloud.langfuse.com)
+    - LANGFUSE_DEBUG (default: false)
+    - LANGFUSE_ENABLED (default: true)
+    - LANGFUSE_ENVIRONMENT (default: production)
+
+    Runtime trace attributes (session_id, user_id, trace_name, metadata, tags)
+    should be passed via config dictionary when invoking your chain/agent:
+        config={
+            "callbacks": [handler],
+            "metadata": {
+                "langfuse_session_id": "session-123",
+                "langfuse_user_id": "user-123",
+                "langfuse_run_name": "my_trace_name",
+            }
+        }
+
     Returns:
         CallbackHandler instance if Langfuse is configured, None otherwise
-        
+
     Example:
         ```python
-        handler = get_langfuse_handler(
-            trace_name="my_agent",
-            metadata={"query_type": "statistical_analysis"},
-            tags=["production", "v1.0"]
+        handler = get_langfuse_handler()
+        result = agent.invoke(
+            input={"query": "test"},
+            config={
+                "callbacks": [handler],
+                "metadata": {
+                    "langfuse_session_id": "session-123",
+                    "langfuse_user_id": "user-123",
+                    "langfuse_run_name": "my_agent",
+                }
+            }
         )
-        llm.invoke(messages, config={"callbacks": [handler]})
         ```
     """
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
-    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
-    
+
     # Return None if Langfuse is not configured (optional dependency)
     if not public_key or not secret_key:
+        return None
+
+    try:
+        handler = CallbackHandler(public_key=public_key)
+        return handler
+    except ValueError as e:
+        print(f"Warning: Invalid Langfuse configuration value: {e}")
+        return None
+    except Exception as e:
+        print(f"Warning: Failed to initialize Langfuse handler: {e}")
         return None
     
     try:
         handler = CallbackHandler(
             public_key=public_key,
             secret_key=secret_key,
-            host=host,
-            session_id=session_id,
-            user_id=user_id,
-            trace_name=trace_name,
-            metadata=metadata,
-            tags=tags,
-            version=version,
-            release=os.getenv("LANGFUSE_RELEASE"),
+            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
             debug=os.getenv("LANGFUSE_DEBUG", "false").lower() == "true",
             enabled=os.getenv("LANGFUSE_ENABLED", "true").lower() == "true",
             sample_rate=_get_sample_rate(),

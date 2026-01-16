@@ -5,8 +5,8 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from agents.utils import get_azure_llm
-from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
-from langfuse.decorators import observe
+from agents.langfuse_config import get_langfuse_handler
+from langfuse import observe
 
 from data.sp_data import load_sensor_data_from_csv
 
@@ -149,16 +149,7 @@ def run_physics_agent(user_query: str) -> str:
     _current_data_json = df.to_json()
 
     # 1. Setup Langfuse handler with metadata and tags
-    langfuse_handler = get_langfuse_handler(
-        trace_name="physics_agent",
-        metadata={
-            "agent_type": "physics",
-            "query": user_query,
-            "tools": ["calculate_correlations", "lookup_physics_formula"],
-            "data_columns": df.columns.tolist()
-        },
-        tags=["agent", "physics", "data-analysis", "correlation"],
-    )
+    langfuse_handler = get_langfuse_handler()
     
     # 2. Setup LLM with Langfuse callback
     callbacks = [langfuse_handler] if langfuse_handler else None
@@ -184,8 +175,5 @@ def run_physics_agent(user_query: str) -> str:
         )
 
     result = agent.invoke(prompt, config={"callbacks": callbacks} if callbacks else {})
-    
-    # Flush Langfuse handler
-    flush_langfuse_handler(langfuse_handler)
     
     return result["messages"][-1].content

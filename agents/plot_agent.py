@@ -10,8 +10,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
 from agents.utils import get_azure_llm
-from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
-from langfuse.decorators import observe
+from agents.langfuse_config import get_langfuse_handler
+from langfuse import observe
 
 from data.sp_data import load_sensor_data_from_csv
 
@@ -208,8 +208,5 @@ def run_plot_agent(user_query: str) -> str:
         tools=tools, 
     )
     result = agent.invoke(prompt, config={"callbacks": callbacks} if callbacks else {})
-    
-    # Flush Langfuse handler
-    flush_langfuse_handler(langfuse_handler)
     
     return result["messages"][-1].content

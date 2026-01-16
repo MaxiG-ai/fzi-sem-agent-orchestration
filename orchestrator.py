@@ -1,5 +1,9 @@
 # orchestrator/router.py
-from typing import TypedDict, Annotated, Any, Optional
+import os
+from dotenv import load_dotenv
+from typing import TypedDict, Annotated
+
+
 
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -8,8 +12,8 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from agents.utils import get_azure_llm
-from agents.langfuse_config import get_langfuse_handler, flush_langfuse_handler
-from langfuse.decorators import observe
+from agents.langfuse_config import get_langfuse_handler
+from langfuse import observe, get_client
 
 # === Agents importieren ===
 from agents.statistics_agent import run_statistics_agent
@@ -49,7 +53,7 @@ def router_decision(state: RouterState):
     # Get Langfuse handler from state if available
     langfuse_handler = state.get("langfuse_handler")
     callbacks = [langfuse_handler] if langfuse_handler else None
-    
+
     model = get_azure_llm(callbacks=callbacks)
     model = model.bind_tools(router_tools)
 
@@ -89,48 +93,45 @@ router_graph = graph.compile()
 def run_router(query: str) -> str:
     """
     Run the router agent with Langfuse tracking.
-    
+
     Args:
         query: The user's query
-        
+
     Returns:
         The agent's response
     """
-    # Setup Langfuse handler with comprehensive metadata
-    langfuse_handler = get_langfuse_handler(
-        trace_name="router_agent",
-        metadata={
-            "agent_type": "router",
-            "query": query,
-            "available_agents": ["statistics_agent", "plot_agent", "physics_agent"],
-            "orchestration_type": "langgraph"
-        },
-        tags=["agent", "router", "orchestration"],
-    )
-    
+    # Setup Langfuse handler
+    langfuse_handler = get_langfuse_handler()
+
     initial = {
         "messages": [
-            SystemMessage(
-                content="""\
-You are an intelligent Router Agent.
+            SystemMessage(content="""\
+Du bist ein intelligenter Router-Agent.
 
-Select one of the following agents based on the user query:
+Wähle basierend auf der Nutzeranfrage einen der folgenden Agents:
+1) Statistik-Agent → Max, Min, Mittelwert, Ausreißer, Kennzahlen
+2) Plot-Agent → Zeitreihen, Histogramm, Scatter, Korrelationsmatrix
+3) Physik-Agent → datenbasierte Korrelationen + physikalische Beziehung/Interpretation
 
-1. Statistics Agent -> Max, Min, Outliers
-2. Plot Agent -> Diagrams, Charts, Visualization
-3. Physics Agent -> Physical relationships, formulas, correlations
-
-ALWAYS use a tool.
-"""
-            ),
+Nutze IMMER ein Tool.
+"""),
             HumanMessage(content=query),
         ],
         "langfuse_handler": langfuse_handler,
     }
 
-    # Configure callbacks for the graph execution
-    config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-    
+    # Configure callbacks and metadata for the graph execution (v3 style)
+    config = {
+        "callbacks": [langfuse_handler],
+        "metadata": {
+            "langfuse_run_name": "router_agent",
+            "agent_type": "router",
+            "query": query,
+            "available_agents": ["statistics_agent", "plot_agent", "physics_agent"],
+            "orchestration_type": "langgraph",
+        }
+    } if langfuse_handler else {}
+
     final_state = None
     for event in router_graph.stream(initial, config=config):
         final_state = event
@@ -144,15 +145,18 @@ ALWAYS use a tool.
     for m in reversed(messages):
         if hasattr(m, "content") and m.content:
             result = m.content
-            # Flush Langfuse handler
-            flush_langfuse_handler(langfuse_handler)
             return result
 
-    # Flush Langfuse handler
-    flush_langfuse_handler(langfuse_handler)
     return "Keine Antwort gefunden."
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    langfuse = get_client()
     print("Router Agent Test")
-    run_router("How is the correlation between temperature and pressure?")
+    dataset = langfuse.get_dataset("fzi_sem_ds")
+    print(langfuse.get_prompt("router_agent"))
+    for i, item in enumerate(dataset.items):
+        if i >= 5:
+            break
+        run_router(item.input)

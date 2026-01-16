@@ -8,12 +8,12 @@ from langchain_core.callbacks import BaseCallbackHandler
 load_dotenv()
 
 
-def get_azure_llm(temperature: float = 0, callbacks: Optional[List[BaseCallbackHandler]] = None):
+def get_azure_llm(temperature: Optional[float] = None, callbacks: Optional[List[BaseCallbackHandler]] = None):
     """
     Returns a configured AzureChatOpenAI instance with optional callbacks.
-    
+
     Args:
-        temperature: Model temperature (default: 0)
+        temperature: Model temperature (default: None, uses model's default)
         callbacks: Optional list of callback handlers (e.g., Langfuse)
     """
     credential = os.getenv("AZURE_AI_CREDENTIAL")
@@ -32,10 +32,12 @@ def get_azure_llm(temperature: float = 0, callbacks: Optional[List[BaseCallbackH
         "api_version": os.getenv("AZURE_AI_API_VERSION", "2024-12-01-preview"),
         "azure_endpoint": endpoint,
         "api_key": credential,
-        "temperature": temperature,
     }
-    
+
+    if temperature is not None:
+        llm_kwargs["temperature"] = temperature
+
     if callbacks:
         llm_kwargs["callbacks"] = callbacks
-    
+
     return AzureChatOpenAI(**llm_kwargs)

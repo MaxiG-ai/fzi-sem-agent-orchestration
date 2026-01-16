@@ -1,15 +1,3 @@
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#     "langchain-core==1.1.0",
-#     "langchain-openai==1.1.0",
-#     "langgraph==1.0.4",
-#     "pandas==2.3.3",
-#     "python-dotenv==1.2.1",
-#     "streampipes==0.97.0",
-#     "utils==1.0.2",
-# ]
-# ///
 """
 StreamPipes Physics Agent Demo
 
