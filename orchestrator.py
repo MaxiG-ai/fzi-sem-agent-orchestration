@@ -1,9 +1,8 @@
 # orchestrator/router.py
 import os
 from dotenv import load_dotenv
-from typing import TypedDict, Annotated
-
-
+from typing import TypedDict, Annotated, cast
+from langchain_core.runnables import RunnableConfig
 
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -13,7 +12,7 @@ from langgraph.prebuilt import ToolNode
 
 from agents.utils import get_azure_llm
 from agents.langfuse_config import get_langfuse_handler
-from langfuse import observe, get_client
+from langfuse import observe, get_client, Evaluation
 
 # === Agents importieren ===
 from agents.statistics_agent import run_statistics_agent
@@ -90,12 +89,13 @@ router_graph = graph.compile()
 # PUBLIC RUN FUNCTION
 
 @observe()
-def run_router(query: str) -> str:
+def run_router(query: str, system_prompt: str) -> str:
     """
     Run the router agent with Langfuse tracking.
 
     Args:
         query: The user's query
+        system_prompt: The system prompt to use
 
     Returns:
         The agent's response
@@ -105,16 +105,7 @@ def run_router(query: str) -> str:
 
     initial = {
         "messages": [
-            SystemMessage(content="""\
-Du bist ein intelligenter Router-Agent.
-
-Wähle basierend auf der Nutzeranfrage einen der folgenden Agents:
-1) Statistik-Agent → Max, Min, Mittelwert, Ausreißer, Kennzahlen
-2) Plot-Agent → Zeitreihen, Histogramm, Scatter, Korrelationsmatrix
-3) Physik-Agent → datenbasierte Korrelationen + physikalische Beziehung/Interpretation
-
-Nutze IMMER ein Tool.
-"""),
+            SystemMessage(content=system_prompt),
             HumanMessage(content=query),
         ],
         "langfuse_handler": langfuse_handler,
@@ -132,14 +123,14 @@ Nutze IMMER ein Tool.
         }
     } if langfuse_handler else {}
 
-    final_state = None
-    for event in router_graph.stream(initial, config=config):
+    final_state = {}
+    for event in router_graph.stream(cast(RouterState, initial), config=cast(RunnableConfig, config)):
         final_state = event
 
-    messages = None
-    if "router" in final_state:
+    messages = []
+    if final_state and "router" in final_state:
         messages = final_state["router"]["messages"]
-    elif "__end__" in final_state:
+    elif final_state and "__end__" in final_state:
         messages = final_state["__end__"]["messages"]
 
     for m in reversed(messages):
@@ -153,10 +144,31 @@ Nutze IMMER ein Tool.
 if __name__ == "__main__":
     load_dotenv()
     langfuse = get_client()
-    print("Router Agent Test")
+    print("Router Agent Experiment")
+    
+    # 1. Get Dataset
     dataset = langfuse.get_dataset("fzi_sem_ds")
-    print(langfuse.get_prompt("router_agent"))
-    for i, item in enumerate(dataset.items):
-        if i >= 5:
-            break
-        run_router(item.input)
+    
+    # 2. Get Prompt
+    prompt = langfuse.get_prompt("router_agent")
+    compiled_prompt = prompt.compile()
+
+    # 3. Define Task
+    def experiment_task(*, item, **kwargs):
+        return run_router(item.input, compiled_prompt)
+
+    # 4. Define Evaluator
+    def basic_evaluator(*, input, output, expected_output, **kwargs):
+        return Evaluation(
+            name="has_response",
+            value=1 if output and len(output) > 5 else 0
+        )
+
+    # 5. Run Experiment
+    print("Running experiment on first 5 items...")
+    langfuse.run_experiment(
+        name="router_experiment_v1",
+        data=dataset.items[:5],
+        task=experiment_task,
+        evaluators=[basic_evaluator]
+    )
