@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from data.sp_data import load_sensor_data_from_csv
 from agents.utils import get_azure_llm
 from agents.langfuse_config import get_langfuse_handler
-from langfuse import observe
+from langfuse import observe, get_client
 
 # --- TOOLS (Docstrings translated to English for the LLM) ---
 
@@ -84,10 +84,10 @@ def run_statistics_agent(user_query: str) -> str:
     df = load_sensor_data_from_csv()
     columns_list = ", ".join(df.columns)
 
-    system_prompt = (
-        f"You are a statistical analysis assistant. Available columns: {columns_list}. "
-        "Use the provided tools to answer questions."
-    )
+    # Get prompt from Langfuse
+    langfuse = get_client()
+    stats_prompt = langfuse.get_prompt("statistics_agent")
+    system_prompt = stats_prompt.compile(columns=columns_list)
 
     prompt = {
         "messages": [

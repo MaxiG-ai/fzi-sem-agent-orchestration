@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 
 from agents.utils import get_azure_llm
 from agents.langfuse_config import get_langfuse_handler
-from langfuse import observe
+from langfuse import observe, get_client
 
 from data.sp_data import load_sensor_data_from_csv
 
@@ -190,10 +190,10 @@ def run_plot_agent(user_query: str) -> str:
     # Define the list of tools
     tools = [plot_time_series, plot_histogram, plot_scatter, plot_corr]
 
-    system_prompt = (
-        "You are a data visualization agent. Create plots based on user requests. "
-        "Always return the file path of the created plot."
-    )
+    # Get prompt from Langfuse
+    langfuse = get_client()
+    plot_prompt = langfuse.get_prompt("plot_agent")
+    system_prompt = plot_prompt.compile()
 
     prompt = {
         "messages": [

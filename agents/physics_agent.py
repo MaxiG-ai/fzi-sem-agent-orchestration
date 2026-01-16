@@ -6,7 +6,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage, SystemMessage
 from agents.utils import get_azure_llm
 from agents.langfuse_config import get_langfuse_handler
-from langfuse import observe
+from langfuse import observe, get_client
 
 from data.sp_data import load_sensor_data_from_csv
 
@@ -156,10 +156,10 @@ def run_physics_agent(user_query: str) -> str:
     llm = get_azure_llm(callbacks=callbacks)
     tools = [calculate_correlations, lookup_physics_formula]
 
-    system_message = f"""You are a physics-aware data analysis assistant. 
-    Available sensor columns: {", ".join(df.columns.tolist())}
-    Use the tools to analyze correlations and explain physical relationships.
-    """
+    # Get prompt from Langfuse
+    langfuse = get_client()
+    physics_prompt = langfuse.get_prompt("physics_agent")
+    system_message = physics_prompt.compile(columns=", ".join(df.columns.tolist()))
 
     prompt = {
         "messages": [
