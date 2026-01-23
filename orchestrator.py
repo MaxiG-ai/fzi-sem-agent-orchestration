@@ -2,11 +2,11 @@
 import os
 from datetime import datetime
 from dotenv import load_dotenv
-from typing import TypedDict, Annotated, cast
+from typing import TypedDict, Annotated, cast, Optional, List
 from langchain_core.runnables import RunnableConfig
 
 from langchain_core.tools import tool
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -90,13 +90,20 @@ router_graph = graph.compile()
 # PUBLIC RUN FUNCTION
 
 @observe()
-def run_router(query: str, system_prompt: str) -> str:
+def run_router(
+    query: str, 
+    system_prompt: str, 
+    session_id: Optional[str] = None, 
+    chat_history: Optional[List[dict]] = None
+    ) -> str:
     """
     Run the router agent with Langfuse tracking.
 
     Args:
         query: The user's query
         system_prompt: The system prompt to use
+        session_id: Optional session ID for grouping traces
+        chat_history: Optional list of previous messages in Marimo/dict format
 
     Returns:
         The agent's response
@@ -104,24 +111,42 @@ def run_router(query: str, system_prompt: str) -> str:
     # Setup Langfuse handler
     langfuse_handler = get_langfuse_handler()
 
+    # Construct messages
+    messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
+    
+    # Add history if available
+    if chat_history:
+        for msg in chat_history:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+    
+    # Add current query
+    messages.append(HumanMessage(content=query))
+
     initial = {
-        "messages": [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=query),
-        ],
+        "messages": messages,
         "langfuse_handler": langfuse_handler,
     }
 
     # Configure callbacks and metadata for the graph execution (v3 style)
+    metadata = {
+        "langfuse_run_name": "router_agent",
+        "agent_type": "router",
+        "query": query,
+        "available_agents": ["statistics_agent", "plot_agent", "physics_agent"],
+        "orchestration_type": "langgraph",
+    }
+    
+    if session_id:
+        metadata["langfuse_session_id"] = session_id
+
     config = {
         "callbacks": [langfuse_handler],
-        "metadata": {
-            "langfuse_run_name": "router_agent",
-            "agent_type": "router",
-            "query": query,
-            "available_agents": ["statistics_agent", "plot_agent", "physics_agent"],
-            "orchestration_type": "langgraph",
-        }
+        "metadata": metadata
     } if langfuse_handler else {}
 
     final_state = {}

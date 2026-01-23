@@ -23,7 +23,14 @@ def _():
     """Import required libraries for StreamPipes and data analysis."""
     from orchestrator import run_router
     import marimo as mo
-    return mo, run_router
+    import uuid
+    return mo, run_router, uuid
+
+
+@app.cell
+def _(uuid):
+    session_id = str(uuid.uuid4())
+    return session_id,
 
 
 @app.cell
@@ -39,9 +46,21 @@ def _(mo):
 
 
 @app.cell
-def _(mo, run_router):
+def _(mo, run_router, session_id):
+    
+    local_system_promt = """Du bist ein intelligenter Router-Agent.
+
+Wähle basierend auf der Nutzeranfrage einen der folgenden Agents:
+1) Statistik-Agent → Max, Min, Mittelwert, Ausreißer, Kennzahlen
+2) Plot-Agent → Zeitreihen, Histogramm, Scatter, Korrelationsmatrix
+3) Physik-Agent → datenbasierte Korrelationen + physikalische Beziehung/Interpretation
+
+Nutze IMMER ein Tool."""
+    
     def agent_router_wrapper_model(messages, config):
-        return run_router(messages[-1].content)
+        query = messages[-1].content
+        history = [{"role": m.role, "content": m.content} for m in messages[:-1]]
+        return run_router(query, local_system_promt, session_id=session_id, chat_history=history)
 
     mo.ui.chat(
         agent_router_wrapper_model,
