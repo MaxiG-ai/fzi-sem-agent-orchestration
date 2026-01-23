@@ -1,5 +1,6 @@
 # orchestrator/router.py
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 from typing import TypedDict, Annotated, cast
 from langchain_core.runnables import RunnableConfig
@@ -12,7 +13,7 @@ from langgraph.prebuilt import ToolNode
 
 from agents.utils import get_azure_llm
 from agents.langfuse_config import get_langfuse_handler
-from langfuse import observe, get_client, Evaluation
+from langfuse import observe, get_client, Evaluation, propagate_attributes
 
 # === Agents importieren ===
 from agents.statistics_agent import run_statistics_agent
@@ -165,10 +166,11 @@ if __name__ == "__main__":
         )
 
     # 5. Run Experiment
-    print("Running experiment on first 5 items...")
-    langfuse.run_experiment(
-        name="router_experiment_v1",
-        data=dataset.items[:5],
-        task=experiment_task,
-        evaluators=[basic_evaluator]
-    )
+    print("Running experiment...")
+    with propagate_attributes(session_id=f"experiment-{datetime.now().strftime('%Y-%m-%d_%H:%M')}"):
+        langfuse.run_experiment(
+            name="router_experiment_v1",
+            data=dataset.items[::5],
+            task=experiment_task,
+            evaluators=[basic_evaluator]
+        )
