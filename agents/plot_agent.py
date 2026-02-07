@@ -86,6 +86,8 @@ def plot_time_series(column: str):
     path = os.path.join(ensure_plots_dir(), f"time_{column}.png")
     plt.savefig(path, bbox_inches="tight")
     plt.close()
+    os.environ["LATEST_PLOT_PATH"] = os.path.abspath(path)
+    print(f"Envpath: {os.environ['LATEST_PLOT_PATH']}")
     return {"path": path}
 
 
@@ -110,6 +112,8 @@ def plot_histogram(column: str, bins: int = 30):
     path = os.path.join(ensure_plots_dir(), f"hist_{column}.png")
     plt.savefig(path, bbox_inches="tight")
     plt.close()
+    os.environ["LATEST_PLOT_PATH"] = os.path.abspath(path)
+    print(f"Envpath: {os.environ['LATEST_PLOT_PATH']}")
     return {"path": path}
 
 
@@ -134,6 +138,8 @@ def plot_scatter(x_col: str, y_col: str):
     path = os.path.join(ensure_plots_dir(), f"scatter_{x_col}_{y_col}.png")
     plt.savefig(path, bbox_inches="tight")
     plt.close()
+    os.environ["LATEST_PLOT_PATH"] = os.path.abspath(path)
+    print(f"Envpath: {os.environ['LATEST_PLOT_PATH']}")
     return {"path": path}
 
 
@@ -157,6 +163,8 @@ def plot_corr():
     path = os.path.join(ensure_plots_dir(), "corr_matrix.png")
     plt.savefig(path, bbox_inches="tight")
     plt.close()
+    os.environ["LATEST_PLOT_PATH"] = os.path.abspath(path)
+    print(f"Envpath: {os.environ['LATEST_PLOT_PATH']}")
     return {"path": path}
 
 # plot agent runner
