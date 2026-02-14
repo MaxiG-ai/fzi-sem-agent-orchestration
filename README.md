@@ -1,22 +1,32 @@
 # fzi-sem-agent-orchestration
+
 Repository for FZI Seminar on Agent Orchestration
 
 ## Setup
 
 1. Install dependencies:
-```bash
-pip install -e .
-```
+
+   ```bash
+   uv sync
+   ```
 
 2. Configure environment variables by copying `.env.example` to `.env`:
-```bash
-cp .env.example .env
-```
+
+   ```bash
+   cp .env.example .env
+   ```
 
 3. Fill in your credentials in the `.env` file:
+
    - Azure OpenAI credentials (required)
    - StreamPipes credentials (optional, for live data)
    - Langfuse credentials (optional, for tracking)
+
+4. Run the agent interaction frontend
+
+   ```bash
+   uv run marimo run orchestrator-demo.py
+   ```
 
 ## Langfuse Tracking
 
@@ -27,6 +37,7 @@ This repository integrates [Langfuse](https://langfuse.com) for comprehensive tr
 1. Sign up for a free account at [https://cloud.langfuse.com](https://cloud.langfuse.com)
 2. Create a new project
 3. Copy your API keys and add them to `.env`:
+
    ```
    LANGFUSE_PUBLIC_KEY=pk-lf-...
    LANGFUSE_SECRET_KEY=sk-lf-...
@@ -47,6 +58,7 @@ Langfuse tracking provides detailed insights into:
 ### Viewing Traces
 
 After running the agents, visit your Langfuse dashboard to see:
+
 - Complete execution traces
 - Performance metrics
 - Token usage statistics
@@ -82,6 +94,7 @@ df = load_sensor_data_from_csv()
 ```
 
 This file can be updated by running `data/sp_data.py` as a script.
+
 ```bash
 python data/sp_data.py
 ```

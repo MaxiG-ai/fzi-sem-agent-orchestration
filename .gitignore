@@ -426,3 +426,5 @@ __marimo__
 .DS_Store
 
 plots/
+
+uv.lock
